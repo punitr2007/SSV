@@ -1,0 +1,259 @@
+# MASTER TASK TRACKER: SPLIT/SECOND: VELOCITY - NATIVE ANDROID ARM64 PORT
+================================================================================
+Generated: 2026-11-24
+Status: STAGE 0 (COMPLETE) | STAGE 1 (COMPLETE) | STAGE 2 (COMPLETE) | STAGE 3 (IN PROGRESS)
+Target Architecture: Android ARM64 (arm64-v8a / armeabi-v7a)
+Target Executable: D:\Codes\Win_codes\Split.Second.Velocity\SplitSecond.exe
+Target Data Directory: D:\Codes\Win_codes\Split.Second.Velocity\data
+Porting Workspace: D:\Codes\Win_codes\SSV
+Analysis Engines: REA (Reverse Engineer Anything) + Ghidra 12.2 PUBLIC
+Ghidra Directory: D:\Codes\Win_codes\ghidra_12.2_PUBLIC
+Headless Ghidra CLI: D:\Codes\Win_codes\ghidra_12.2_PUBLIC\support\analyzeHeadless.bat
+Host Compiler: C:\Program Files\Windhawk\Compiler\bin\clang++.exe (Clang 20.1.3 MinGW)
+
+================================================================================
+EXECUTIVE STATUS & STAGE PROGRESSION
+================================================================================
+[x] STAGE 0: Environment & Target Confirmation                       [COMPLETED]
+[x] STAGE 1: Binary Analysis & Android Portability Audit             [COMPLETED]
+[x] STAGE 2: Platform-Agnostic C/C++ Logic Core Rebuild              [COMPLETED]
+[>] STAGE 3: Android NDK Port, Graphics/Input/Audio, & APK Build     [IN PROGRESS]
+
+Current Pipeline Position:
+We have fully extracted and verified the platform-agnostic C++17 core engine,
+state machine (10 states), powerplay event dispatcher, 3D math system, and 
+the full LZSS-compressed .ark virtual filesystem (VFS). 100% of unit tests pass.
+We are now entering Stage 3: Android NDK project scaffolding, SDL2 platform layer,
+OpenGL ES 3.0 / Vulkan renderer pipeline, FMOD Android integration, and touch input.
+
+================================================================================
+ANDROID PORT FEASIBILITY & RISK AUDIT MATRIX
+================================================================================
+Overall Feasibility: 7.5 / 10 (High Feasibility with targeted subsystem rewrites)
+
+| Subsystem              | Status / Approach                               | Feasibility | Android Strategy / Mitigation |
+|------------------------|-------------------------------------------------|-------------|-------------------------------|
+| 1. Asset VFS (.ark)    | Solved (100% verified C++17 parser & LZSS)      | 10/10       | Read directly from APK assets / OBB via AAssetManager. |
+| 2. Game State Machine  | Solved (10 states, RTTI & vtables extracted)    | 9.5/10      | Pure C++ state machine running in fixed 60Hz tick. |
+| 3. Math & Core Logic   | Solved (Vector, Matrix, Quat, Powerplay Events) | 9.5/10      | SIMD / NEON accelerated C++ math library. |
+| 4. Audio Middleware    | FMOD Ex 4.x + FMOD Event (.fev / .fsb)          | 9/10        | Drop-in official libfmod.so for Android ARM64. |
+| 5. Window / OS Layer   | Win32 / DirectInput abstracted via HAL          | 9/10        | SDL2 Android NativeActivity + GLES3 surface. |
+| 6. UI Subsystem        | Scaleform GFx (Flash .swf / .gfx)               | 7/10        | Gameswf runtime / Dear ImGui HUD / Gfx quad renderer. |
+| 7. Physics Engine      | Statically linked x86 Havok 5.5/6.x             | 6.5/10      | Decompiled Havok car dynamics mapped to Bullet/PhysX. |
+| 8. Graphics Renderer   | Direct3D 9Ex + HLSL shader combos               | 6/10        | GLES 3.0 / Vulkan backend + SPIRV-Cross shader translation. |
+
+Top 3 Blockers & Risk Mitigations:
+1. Direct3D 9 to OpenGL ES 3.0 / Vulkan:
+   - Risk: PC build uses precompiled D3D9 shader combos (D:\Codes\Win_codes\Split.Second.Velocity\data\global_shader_combos).
+   - Mitigation: Disassemble DXBC bytecodes via DXBC disassembler and translate to GLSL ES 3.0 via SPIRV-Cross, or implement a clean clustered forward GLES3 renderer for the extracted model geometries.
+2. Havok Vehicle Physics on ARM64:
+   - Risk: 32-bit x86 Havok binaries cannot run on ARM64.
+   - Mitigation: Extract vehicle suspension, spring, friction, and torque curves from binary RTTI (cVehiclePhysicsState) and drive them using a native ARM64 raycast vehicle model.
+3. Scaleform GFx UI:
+   - Risk: Proprietary Autodesk Scaleform library.
+   - Mitigation: Extract UI textures/sprites from frontendpowerplays.ark and render HUD through custom orthographic GLES3 quads.
+
+================================================================================
+STAGE 0: Environment & Target Confirmation [COMPLETED]
+================================================================================
+Artifacts:
+- D:\Codes\Win_codes\SSV\inspect_splitsecond.py
+- D:\Codes\Win_codes\SSV\save_evidence.py
+- D:\Codes\Win_codes\SSV\architectural_evidence.json
+
+Environment Evidence:
+- REA Engine: Active with Capstone / PE parsing / Ghidra headless bridge.
+- Ghidra Version: Ghidra 12.2 PUBLIC at D:\Codes\Win_codes\ghidra_12.2_PUBLIC
+- Ghidra Headless Script: D:\Codes\Win_codes\ghidra_12.2_PUBLIC\support\analyzeHeadless.bat
+- Target Executable: D:\Codes\Win_codes\Split.Second.Velocity\SplitSecond.exe
+  - Size: 14,004,224 bytes
+  - Architecture: PE32 (x86 32-bit, IMAGE_FILE_MACHINE_I386)
+  - Subsystem: IMAGE_SUBSYSTEM_WINDOWS_GUI (2)
+  - Image Base: 0x00400000
+  - Entry Point RVA: 0x00D8F150 (VA: 0x0118F150 in .secu DRM stub)
+  - True CRT Entry Point: 0x007561F6 (winmain_crt_startup)
+  - WinMain VA: 0x00A172B0
+  - SHA-256: d11fc7f48dd504bdefb16b548980bd41101f6c1a23d29c03487a81d4de42173e
+  - PE Sections:
+    * .text (VA: 0x00401000, Size: 7,970,705 bytes) - Code
+    * .rdata (VA: 0x00BA0000, Size: 1,415,223 bytes) - Read-only data, RTTI, vtables
+    * .data (VA: 0x00CFA000, Size: 686,396 bytes) - Global variables
+    * .tls (VA: 0x00DA2000, Size: 6,161 bytes) - Thread local storage
+    * .rsrc (VA: 0x00DA4000, Size: 4,123,316 bytes) - Resources, icon
+    * .secu (VA: 0x0118E000, Size: 19,088 bytes) - SecuROM / DRM unpack wrapper
+
+================================================================================
+STAGE 1: Binary Analysis & Android Portability Audit [COMPLETED]
+================================================================================
+Artifacts:
+- D:\Codes\Win_codes\SSV\architecture_map.md (Complete architectural report)
+- D:\Codes\Win_codes\SSV\architectural_evidence.json (JSON evidentiary database)
+- D:\Codes\Win_codes\SSV\architectural_strings.txt (Extracted string table)
+- D:\Codes\Win_codes\SSV\rtti_classes.txt (Complete list of 1,200+ RTTI classes)
+
+1. Binary Triage & Compiler:
+   - Toolchain: MSVC 8.0 (Visual C++ 2005 / SP1, _MSC_VER 1400)
+   - Linker: Microsoft Linker 8.0
+   - Engine: Black Rock Studio Proprietary Engine (ATV / Pure Engine Evolution)
+   - Mutex Identifier: "Global\\DISNEYATVPUREPC" (VA: 0x00C4AA64)
+
+2. Import Categorization for Android ARM64:
+   [PORTABLE]
+   - Statically linked C/C++ runtime (memcpy, memmove, sin, cos, qsort, std::vector, etc.)
+   [NEEDS-SHIM]
+   - KERNEL32.dll: CreateThread, Sleep, GetTickCount, WaitForSingleObject, CriticalSection
+     -> Shimmed with C++17 std::thread, std::mutex, std::chrono, pthreads
+   - KERNEL32.dll: CreateFileA, ReadFile, CloseHandle
+     -> Shimmed with portable VFS / AAssetManager / posix fopen
+   [MUST-REWRITE]
+   - d3d9.dll / d3dx9_42.dll: Direct3DCreate9, CreateDevice, SetRenderState, DrawIndexedPrimitive
+     -> Rewriting to OpenGL ES 3.0 / Vulkan abstraction
+   - DINPUT8.dll / XINPUT1_3.dll: DirectInput8Create, XInputGetState
+     -> Rewriting to SDL2 GameController / Touch Virtual Gamepad
+   - USER32.dll: CreateWindowExA, PeekMessageA, DispatchMessageA
+     -> Rewriting to SDL2 / Android NativeActivity
+   - fmodex.dll / fmod_event.dll:
+     -> Replaced with official Android ARM64 FMOD Core / Event shared library
+   - binkw32.dll:
+     -> Replaced with Android MediaCodec or libvpx/software video decoder
+
+3. Game Loop & State Machine Evidence:
+   - Thread Model: Decoupled Simulation Thread (0x00405E90) and Render/Main Thread.
+   - Fixed Tick Rate: 60Hz (dt = 0.0166667s).
+   - Base Class: `cGameState` (TypeDescriptor: 0x00D012A0, COL: 0x00C742D0)
+   - Extracted Concrete State Vtables:
+     * cBootupState       (Vtable: 0x00BA2AA4 | Update: 0x007D8120)
+     * cIntroState        (Vtable: 0x00BA32DC | Update: 0x00414BE0)
+     * cIntroSequence     (Vtable: 0x00BA37EC | Enter: 0x00418830)
+     * cFrontendLoadState (Vtable: 0x00BA3398 | Update: 0x00415010)
+     * cFrontendRunState  (Vtable: 0x00BA38C0 | Update: 0x004192A0)
+     * cInGameLoadState   (Vtable: 0x00BA3110 | Update: 0x00413BB0)
+     * cInGameRunState    (Vtable: 0x00BA36A4 | Update: 0x00417EB0)
+     * cInGameMovieState  (Vtable: 0x00BA3518 | Update: 0x00417580)
+     * cLoadDemoState     (Vtable: 0x00BA3894 | Update: 0x007D8120)
+
+4. Asset Storage & VFS:
+   - Container: .ark archives (Big-endian 16-byte header, 20-byte entries)
+   - Compression: Okumura Sliding-Window LZSS (Window: 4096 bytes, Max Match: 18 bytes)
+   - Decompressor Function VA: 0x00B53830 (lzssUnpackFactory::Unpack)
+
+================================================================================
+STAGE 2: Platform-Agnostic C/C++ Logic Core Rebuild [COMPLETED]
+================================================================================
+Artifacts:
+- D:\Codes\Win_codes\SSV\include\platform_abstraction.h (Cross-platform HAL)
+- D:\Codes\Win_codes\SSV\src\platform\platform_null.cpp (Headless / unit test HAL)
+- D:\Codes\Win_codes\SSV\src\platform\platform_win32.cpp (Host testing HAL)
+- D:\Codes\Win_codes\SSV\src\core\math_types.h (Vector2/3/4, Matrix4x4, Quat, BBox)
+- D:\Codes\Win_codes\SSV\src\core\powerplay_system.h (Event & trigger system)
+- D:\Codes\Win_codes\SSV\src\core\state_machine.h & .cpp (10 game states)
+- D:\Codes\Win_codes\SSV\src\core\game_engine.h & .cpp (Fixed-step simulation loop)
+- D:\Codes\Win_codes\SSV\src\assets\ark_parser.h & .cpp (Portable Ark parser)
+- D:\Codes\Win_codes\SSV\src\assets\lzss_decomp.h & .cpp (Verified LZSS decompressor)
+- D:\Codes\Win_codes\SSV\assets\ark_tool.py (Asset extraction utility)
+- D:\Codes\Win_codes\SSV\tests\test_runner.cpp (Test harness)
+- D:\Codes\Win_codes\SSV\test_runner.exe (Compiled test binary - 100% PASS)
+
+Unit Test Verification Results:
+- Math Verification: Matrix multiplication, transforms, quaternion slerp -> PASSED
+- State Machine: State registration, transitions, enter/update/exit flow -> PASSED
+- LZSS Decompression: Exact byte-level match on compressed buffers -> PASSED
+- Ark Archive Parsing: Correct header parsing, entry enumeration, table extraction -> PASSED
+
+================================================================================
+STAGE 3: Android NDK Port, Graphics/Input/Audio, & APK Build [IN PROGRESS]
+================================================================================
+Goal: Produce a native, installable Android APK (arm64-v8a) running the 
+Split/Second engine core with SDL2, OpenGL ES 3.0, FMOD Android, and touch controls.
+
+Milestone 3.1: Android Project Scaffold & Toolchain Setup
+[ ] 3.1.1 Configure Android NDK (r25c or higher recommended) and CMake 3.22+
+[ ] 3.1.2 Create Android project directory structure:
+          `D:\Codes\Win_codes\SSV\android\`
+          ├── app/
+          │   ├── src/main/
+          │   │   ├── AndroidManifest.xml
+          │   │   ├── java/org/libsdl/app/ (SDL2 Activity & Controller)
+          │   │   ├── cpp/ (CMakeLists.txt, JNI bindings)
+          │   │   └── assets/ (resident.ark, frontendpowerplays.ark)
+          │   └── build.gradle
+          └── build.gradle, settings.gradle
+[ ] 3.1.3 Configure target ABIs: `arm64-v8a` (Primary 64-bit), `armeabi-v7a` (Optional 32-bit).
+[ ] 3.1.4 Verify cross-compilation of core logic static library (`libssv_core.a`).
+
+Milestone 3.2: SDL2 Platform Abstraction Layer (`platform_android.cpp`)
+[ ] 3.2.1 Integrate SDL2 as an Android NativeActivity submodule or prebuilt NDK library.
+[ ] 3.2.2 Implement `SSV::IPlatform` for Android:
+          - Window creation: `SDL_CreateWindow(..., SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN)`
+          - High-resolution timing: `SDL_GetPerformanceCounter()` / `SDL_GetPerformanceFrequency()`
+          - Threading: `SDL_CreateThread`, `SDL_CreateMutex` / `std::thread`
+          - File I/O: Bridge `SSV::IFile` to `SDL_RWops` and `AAssetManager_open`
+[ ] 3.2.3 Handle Android Lifecycle:
+          - `APP_CMD_PAUSE`: Suspend game simulation thread, pause audio.
+          - `APP_CMD_RESUME`: Restore simulation, reset delta-time clock.
+          - `APP_CMD_TERM_WINDOW` / `APP_CMD_INIT_WINDOW`: Surface destroy & recreate.
+
+Milestone 3.3: Graphics Subsystem (Direct3D 9 -> OpenGL ES 3.0 / Vulkan)
+[ ] 3.3.1 Define hardware-independent rendering interface:
+          `include/render_backend.h` (IRenderBackend: Init, BeginFrame, DrawIndexed, EndFrame).
+[ ] 3.3.2 Implement OpenGL ES 3.0 backend:
+          `src/render/gles3/gles3_backend.cpp`
+          - Context initialization with EGL (RGB888, Depth 24, Stencil 8).
+          - Vertex Buffer Object (VBO) & Element Buffer Object (EBO) management.
+[ ] 3.3.3 Shader Translation Pipeline:
+          - Inspect binary shaders in `D:\Codes\Win_codes\Split.Second.Velocity\data\global_shader_combos`.
+          - Convert D3D9 vertex/pixel shaders to GLSL ES 3.00 via SPIRV-Cross:
+            * World geometry pass (ambient, diffuse, specular, normal maps).
+            * Car paint & reflection shader (Fresnel, environment cubemap).
+            * Particle & explosion effects (alpha blend, additive).
+[ ] 3.3.4 Render First Triangle / Textured Mesh on Android device.
+
+Milestone 3.4: Audio Subsystem (FMOD Core for Android)
+[ ] 3.4.1 Download FMOD Core & Studio SDK for Android (matches FMOD Ex API).
+[ ] 3.4.2 Place `libfmod.so` and `fmod.h` into `android/app/src/main/jniLibs/arm64-v8a/`.
+[ ] 3.4.3 Initialize FMOD System with OpenSL ES output on Android.
+[ ] 3.4.4 Bridge asset loader so FMOD reads sound banks directly from APK assets or extracted cache.
+[ ] 3.4.5 Verify in-game music and sound effects playback.
+
+Milestone 3.5: Input Subsystem (Touch Virtual Controls & Gamepad)
+[ ] 3.5.1 Implement virtual touch overlay:
+          - Left thumb zone: Steering slider / Virtual analog stick (or Device Gyroscope tilt).
+          - Right thumb zone: Throttle (Accelerate), Footbrake (Reverse), Handbrake (Drift).
+          - Dedicated Powerplay Trigger Buttons:
+            * Level 1 Powerplay (Blue icon trigger).
+            * Level 2 Super Powerplay (Red icon trigger).
+[ ] 3.5.2 Integrate SDL2 GameController API for physical USB / Bluetooth gamepads (Xbox, DualShock).
+
+Milestone 3.6: Physics & Vehicle Dynamics Adaptor
+[ ] 3.6.1 Extract vehicle suspension, spring rates, and tire friction from binary RTTI classes
+          (`cVehiclePhysicsState`, `cCar`, `cRigidBody`).
+[ ] 3.6.2 Implement vehicle raycast suspension controller running in the fixed 60Hz tick.
+[ ] 3.6.3 Bind vehicle steering, acceleration, and braking inputs to the vehicle state.
+
+Milestone 3.7: Asset Packaging, Gradle Build, & Device Testing
+[ ] 3.7.1 Asset Packaging:
+          - Bundle `resident.ark` (~50 MB core assets) into `assets/`.
+          - Stream track `.ark` archives from device external storage (`/sdcard/Android/data/...`).
+[ ] 3.7.2 Run `./gradlew assembleDebug` to build `SplitSecond-debug.apk`.
+[ ] 3.7.3 Deploy via ADB: `adb install -r SplitSecond-debug.apk`.
+[ ] 3.7.4 Validate first frame, input response, and audio on live Android device/emulator.
+
+================================================================================
+AUTOMATED GHIDRA HEADLESS SCRIPT REFERENCE
+================================================================================
+To decompile or analyze further binary functions using Ghidra 12.2 without GUI overhead:
+
+Command:
+`D:\Codes\Win_codes\ghidra_12.2_PUBLIC\support\analyzeHeadless.bat <PROJECT_DIR> <PROJECT_NAME> -import D:\Codes\Win_codes\Split.Second.Velocity\SplitSecond.exe -postScript <SCRIPT_PATH>`
+
+Key Binary Locations in SplitSecond.exe:
+- 0x007561F6 : winmain_crt_startup
+- 0x00A172B0 : WinMain
+- 0x00A12CE0 : Game Application Init
+- 0x00405E90 : Game Simulation Thread Proc
+- 0x00B53830 : LZSS Decompressor (lzssUnpackFactory::Unpack)
+- 0x00B189BA : Direct3DCreate9 IAT Thunk
+- 0x00BA2AA4 : cBootupState Vtable
+- 0x00BA38C0 : cFrontendRunState Vtable
+- 0x00BA36A4 : cInGameRunState Vtable
+- 0x00C4AA64 : Engine Mutex ("Global\\DISNEYATVPUREPC")

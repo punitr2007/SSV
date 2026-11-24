@@ -1,0 +1,30 @@
+=== binkw32.dll (16 functions) ===
+  0x00B9B378 Hint:66    _BinkShouldSkip@4
+  0x00B9B37C Hint:41    _BinkNextFrame@4
+  0x00B9B380 Hint:24    _BinkDoFrame@4
+  0x00B9B384 Hint:46    _BinkOpenWaveOut@4
+  0x00B9B388 Hint:15    _BinkClose@4
+  0x00B9B38C Hint:28    _BinkGetFrameBuffersInfo@8
+  0x00B9B390 Hint:57    _BinkSetMixBinVolumes@20
+  0x00B9B394 Hint:48    _BinkRegisterFrameBuffers@8
+  0x00B9B398 Hint:27    _BinkGetError@0
+  0x00B9B39C Hint:42    _BinkOpen@8
+  0x00B9B3A0 Hint:63    _BinkSetSoundTrack@8
+  0x00B9B3A4 Hint:55    _BinkSetIOSize@4
+  0x00B9B3A8 Hint:47    _BinkPause@8
+  0x00B9B3AC Hint:38    _BinkGoto@12
+  0x00B9B3B0 Hint:68    _BinkWait@4
+  0x00B9B3B4 Hint:62    _BinkSetSoundSystem@8
+
+=== d3dx9_42.dll (7 functions) ===
+  0x00B9B3C4 Hint:110   D3DXCreateVolumeTextureFromFileInMemory
+  0x00B9B3C8 Hint:40    D3DXCreateCubeTextureFromFileInMemory
+  0x00B9B3CC Hint:14    D3DXCompileShaderFromFileA
+  0x00B9B3D0 Hint:13    D3DXCompileShader
+  0x00B9B3D4 Hint:94    D3DXCreateTextureFromFileExA
+  0x00B9B3D8 Hint:180   D3DXLoadSurfaceFromMemory
+  0x00B9B3DC Hint:96    D3DXCreateTextureFromFileInMemory
+
+=== WS2_32.dll (36 functions) ===
+  0x00B9B2DC Hint:18    WSACloseEvent
+  0x00B9B2E0 Hint:65    WSASocketA
