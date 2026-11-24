@@ -8,7 +8,8 @@ ssv_dir = r"D:\Codes\Win_codes\SSV"
 includes = [
     "-I", os.path.join(ssv_dir, "include"),
     "-I", os.path.join(ssv_dir, "src", "core"),
-    "-I", os.path.join(ssv_dir, "src", "assets")
+    "-I", os.path.join(ssv_dir, "src", "assets"),
+    "-I", os.path.join(ssv_dir, "src", "render")
 ]
 
 sources = [
@@ -20,18 +21,22 @@ sources = [
     os.path.join(ssv_dir, "src", "core", "vehicle_physics.cpp"),
     os.path.join(ssv_dir, "src", "core", "vehicle_database.cpp"),
     os.path.join(ssv_dir, "src", "core", "camera_rig.cpp"),
+    os.path.join(ssv_dir, "src", "render", "touch_hud.cpp"),
+    os.path.join(ssv_dir, "src", "render", "gl_platform.cpp"),
     os.path.join(ssv_dir, "tests", "test_math.cpp"),
     os.path.join(ssv_dir, "tests", "test_state_machine.cpp"),
     os.path.join(ssv_dir, "tests", "test_ark_parser.cpp"),
     os.path.join(ssv_dir, "tests", "test_vehicle_physics.cpp"),
     os.path.join(ssv_dir, "tests", "test_vehicle_database.cpp"),
     os.path.join(ssv_dir, "tests", "test_cooked_bundle.cpp"),
+    os.path.join(ssv_dir, "tests", "test_touch_hud.cpp"),
     os.path.join(ssv_dir, "tests", "test_runner.cpp")
 ]
 
 out_exe = os.path.join(ssv_dir, "test_runner.exe")
+libs = ["-lopengl32", "-lgdi32"]
 
-cmd = [clang, "-std=c++17", "-O2", "-static"] + includes + sources + ["-o", out_exe]
+cmd = [clang, "-std=c++17", "-O2", "-static"] + includes + sources + libs + ["-o", out_exe]
 print(f"Compiling with Clang: {' '.join(cmd)}")
 
 res = subprocess.run(cmd, capture_output=True, text=True)

@@ -21,6 +21,7 @@ set(SSV_SOURCES
     "${SSV_ROOT}/src/platform/platform_android.cpp"
     "${SSV_ROOT}/src/render/gles3/gles3_backend.cpp"
     "${SSV_ROOT}/src/render/vehicle_renderer.cpp"
+    "${SSV_ROOT}/src/render/touch_hud.cpp"
     "${SSV_ROOT}/src/render/gl_platform.cpp"
     "${SSV_ROOT}/src/core/vehicle_physics.cpp"
     "${SSV_ROOT}/src/core/vehicle_database.cpp"

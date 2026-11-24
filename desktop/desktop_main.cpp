@@ -12,6 +12,7 @@
 #include "vehicle_physics.h"
 #include "camera_rig.h"
 #include "vehicle_renderer.h"
+#include "touch_hud.h"
 
 #pragma comment(lib, "opengl32.lib")
 #pragma comment(lib, "user32.lib")
@@ -27,6 +28,7 @@ typedef BOOL (WINAPI * PFNWGLSWAPINTERVALEXTPROC)(int interval);
 #define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
 
 static SSV::InputMapper g_InputMapper;
+static SSV::TouchHUD g_TouchHUD;
 static bool g_Running = true;
 static bool g_ResetRequested = false;
 static int g_WindowWidth = 1280;
@@ -45,7 +47,29 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_WindowHeight = HIWORD(lParam);
             if (g_WindowHeight > 0) {
                 glViewport(0, 0, g_WindowWidth, g_WindowHeight);
+                g_TouchHUD.Resize((float)g_WindowWidth, (float)g_WindowHeight);
             }
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN: {
+            float mx = (float)LOWORD(lParam);
+            float my = (float)HIWORD(lParam);
+            g_TouchHUD.OnPointerDown(0, mx, my);
+            return 0;
+        }
+
+        case WM_MOUSEMOVE: {
+            if (wParam & MK_LBUTTON) {
+                float mx = (float)LOWORD(lParam);
+                float my = (float)HIWORD(lParam);
+                g_TouchHUD.OnPointerMove(0, mx, my);
+            }
+            return 0;
+        }
+
+        case WM_LBUTTONUP: {
+            g_TouchHUD.OnPointerUp(0);
             return 0;
         }
 
@@ -82,6 +106,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     break;
                 case 'R':
                     if (down) g_ResetRequested = true;
+                    break;
+                case 'T':
+                    if (down) g_TouchHUD.ToggleEditMode();
                     break;
                 case VK_ESCAPE:
                     if (down) g_Running = false;
@@ -196,6 +223,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Initialize On-Screen Touch HUD & Layout Customizer for interactive mouse / touch testing
+    g_TouchHUD.Initialize((float)g_WindowWidth, (float)g_WindowHeight, "touch_layout.cfg");
+
     if (renderer.HasTrackMesh()) {
         vehicleSim.SetRoadCollision(renderer.GetRoadTriangles());
         vehicleSim.Reset(renderer.GetTrackSpawnPoint());
@@ -239,6 +269,20 @@ int main(int argc, char** argv) {
         while (accumulator >= FIXED_TIMESTEP) {
             lastInput = g_InputMapper.Sample(currentTick);
 
+            // Sample Touch HUD on-screen controls (supports mouse clicks and layout editing)
+            SSV::InputState touchInput;
+            bool resetFromTouch = false;
+            g_TouchHUD.UpdateInputState(touchInput, resetFromTouch);
+            if (resetFromTouch) g_ResetRequested = true;
+
+            // Merge Touch HUD with keyboard inputs
+            lastInput.steer = std::clamp(lastInput.steer + touchInput.steer, -1.0f, 1.0f);
+            lastInput.throttle = std::clamp(std::max(lastInput.throttle, touchInput.throttle), 0.0f, 1.0f);
+            lastInput.brake = std::clamp(std::max(lastInput.brake, touchInput.brake), 0.0f, 1.0f);
+            lastInput.handbrake = lastInput.handbrake || touchInput.handbrake;
+            lastInput.powerplay1 = lastInput.powerplay1 || touchInput.powerplay1;
+            lastInput.powerplay2 = lastInput.powerplay2 || touchInput.powerplay2;
+
             vehicleSim.Step(lastInput, static_cast<float>(FIXED_TIMESTEP));
             cameraRig.Update(
                 vehicleSim.GetPosition(),
@@ -259,6 +303,9 @@ int main(int argc, char** argv) {
         float aspectRatio = (float)g_WindowWidth / (float)(g_WindowHeight > 0 ? g_WindowHeight : 1);
         bool isBraking = (lastInput.brake > 0.05f || lastInput.handbrake);
         renderer.RenderScene(cameraRig, vehicleSim, aspectRatio, isBraking);
+
+        // Render 2D On-Screen Touch Controls & Layout Customizer
+        g_TouchHUD.Render((float)g_WindowWidth, (float)g_WindowHeight);
 
         SwapBuffers(hdc);
         frameCount++;

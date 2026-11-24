@@ -15,6 +15,7 @@ includes = [
 sources = [
     os.path.join(ssv_dir, "desktop", "desktop_main.cpp"),
     os.path.join(ssv_dir, "src", "render", "vehicle_renderer.cpp"),
+    os.path.join(ssv_dir, "src", "render", "touch_hud.cpp"),
     os.path.join(ssv_dir, "src", "render", "gl_platform.cpp"),
     os.path.join(ssv_dir, "src", "core", "camera_rig.cpp"),
     os.path.join(ssv_dir, "src", "core", "vehicle_physics.cpp"),

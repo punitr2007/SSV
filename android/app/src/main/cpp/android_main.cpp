@@ -13,6 +13,7 @@
 #include "vehicle_physics.h"
 #include "camera_rig.h"
 #include "vehicle_renderer.h"
+#include "touch_hud.h"
 
 #define LOG_TAG "SSV_Main"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -29,6 +30,8 @@ static SSV::Physics::VehicleSimulation g_VehicleSim;
 static SSV::CameraRig g_CameraRig;
 static SSV::VehicleRenderer g_Renderer;
 static bool g_RendererInitialized = false;
+static SSV::TouchHUD g_TouchHUD;
+static bool g_TouchHudInitialized = false;
 
 struct EngineContext {
     struct android_app* app;
@@ -95,6 +98,19 @@ static int InitDisplay(struct EngineContext* engine) {
         }
     }
 
+    // Initialize Touch HUD and Virtual Layout Customizer
+    if (!g_TouchHudInitialized) {
+        std::string cfgPath = "";
+        if (engine->app && engine->app->activity && engine->app->activity->internalDataPath) {
+            cfgPath = std::string(engine->app->activity->internalDataPath) + "/touch_layout.cfg";
+        }
+        g_TouchHUD.Initialize((float)w, (float)h, cfgPath);
+        g_TouchHudInitialized = true;
+        LOGI("[SSV_Main] TouchHUD & Layout Customizer initialized (%dx%d, cfg=%s)", w, h, cfgPath.c_str());
+    } else {
+        g_TouchHUD.Resize((float)w, (float)h);
+    }
+
     // Spawn vehicle on real 3D track mesh if loaded, otherwise fallback to flat plane
     if (g_Renderer.HasTrackMesh()) {
         g_VehicleSim.SetRoadCollision(g_Renderer.GetRoadTriangles());
@@ -114,6 +130,11 @@ static int InitDisplay(struct EngineContext* engine) {
 }
 
 static void TerminateDisplay(struct EngineContext* engine) {
+    if (g_TouchHudInitialized) {
+        g_TouchHUD.Shutdown();
+        g_TouchHudInitialized = false;
+    }
+
     if (g_RendererInitialized) {
         g_Renderer.Shutdown();
         g_RendererInitialized = false;
@@ -137,57 +158,49 @@ static void TerminateDisplay(struct EngineContext* engine) {
 
 static int32_t HandleInput(struct android_app* app, AInputEvent* event) {
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
-        struct EngineContext* engine = (struct EngineContext*)app->userData;
         int rawAction = AMotionEvent_getAction(event);
         int action = rawAction & AMOTION_EVENT_ACTION_MASK;
         int pointerIndex = (rawAction & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-        size_t pointerCount = AMotionEvent_getPointerCount(event);
+        int pointerId = AMotionEvent_getPointerId(event, pointerIndex);
+        float px = AMotionEvent_getX(event, pointerIndex);
+        float py = AMotionEvent_getY(event, pointerIndex);
 
-        if (action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_CANCEL) {
-            // Touch released
-            g_CurrentInput.steer = 0.0f;
-            g_CurrentInput.throttle = 0.0f;
-            g_CurrentInput.brake = 0.0f;
-            g_CurrentInput.handbrake = false;
-            return 1;
+        switch (action) {
+            case AMOTION_EVENT_ACTION_DOWN:
+            case AMOTION_EVENT_ACTION_POINTER_DOWN:
+                g_TouchHUD.OnPointerDown(pointerId, px, py);
+                break;
+            case AMOTION_EVENT_ACTION_MOVE: {
+                size_t pointerCount = AMotionEvent_getPointerCount(event);
+                for (size_t i = 0; i < pointerCount; ++i) {
+                    int pId = AMotionEvent_getPointerId(event, i);
+                    float curX = AMotionEvent_getX(event, i);
+                    float curY = AMotionEvent_getY(event, i);
+                    g_TouchHUD.OnPointerMove(pId, curX, curY);
+                }
+                break;
+            }
+            case AMOTION_EVENT_ACTION_UP:
+            case AMOTION_EVENT_ACTION_POINTER_UP:
+                g_TouchHUD.OnPointerUp(pointerId);
+                break;
+            case AMOTION_EVENT_ACTION_CANCEL:
+                g_TouchHUD.OnCancel();
+                break;
+            default:
+                break;
         }
 
-        // Multi-touch virtual zones
-        float steerVal = 0.0f;
-        float throttleVal = 0.0f;
-        float brakeVal = 0.0f;
-        bool handbrakeVal = false;
+        bool resetTriggered = false;
+        g_CurrentInput.Reset();
+        g_TouchHUD.UpdateInputState(g_CurrentInput, resetTriggered);
 
-        for (size_t i = 0; i < pointerCount; ++i) {
-            // When a secondary finger lifts, skip the pointer being released
-            if (action == AMOTION_EVENT_ACTION_POINTER_UP && (int)i == pointerIndex) {
-                continue;
-            }
-
-            float x = AMotionEvent_getX(event, i) / (float)engine->width;
-            float y = AMotionEvent_getY(event, i) / (float)engine->height;
-
-            if (x < 0.45f) {
-                // Left zone: Steering slider (center around 0.225)
-                float s = (x - 0.225f) / 0.16f;
-                steerVal = std::clamp(s, -1.0f, 1.0f);
-            } else {
-                // Right zone: Throttle (top) / Brake (bottom) / Handbrake (far right)
-                if (x > 0.82f && y > 0.35f) {
-                    handbrakeVal = true;
-                }
-                if (y < 0.50f) {
-                    throttleVal = 1.0f;
-                } else {
-                    brakeVal = 1.0f;
-                }
-            }
+        if (resetTriggered) {
+            SSV::Vector3 spawn = g_Renderer.HasTrackMesh() ? g_Renderer.GetTrackSpawnPoint() : SSV::Vector3{0.0f, 0.40f, 0.0f};
+            g_VehicleSim.Reset(spawn);
+            g_CameraRig.Reset(g_VehicleSim.GetPosition(), g_VehicleSim.GetOrientation());
+            LOGI("[SSV_Main] Vehicle reset triggered by on-screen touch control.");
         }
-
-        g_CurrentInput.steer = steerVal;
-        g_CurrentInput.throttle = throttleVal;
-        g_CurrentInput.brake = brakeVal;
-        g_CurrentInput.handbrake = handbrakeVal;
         return 1;
     }
     return 0;
@@ -309,7 +322,10 @@ void android_main(struct android_app* state) {
             bool isBraking = (g_CurrentInput.brake > 0.05f || g_CurrentInput.handbrake);
             g_Renderer.RenderScene(g_CameraRig, g_VehicleSim, aspect, isBraking);
 
-            // 4. Swap EGL buffers
+            // 4. Render Touch Controls & HUD Layout Customizer Overlay
+            g_TouchHUD.Render((float)engine.width, (float)engine.height);
+
+            // 5. Swap EGL buffers
             eglSwapBuffers(engine.display, engine.surface);
 
             auto frameEnd = std::chrono::high_resolution_clock::now();
