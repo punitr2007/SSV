@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.disney.splitsecond'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.disney.splitsecond"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0-reconstruction"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -O3 -fexceptions -frtti"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+            jniDebuggable true
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.12.0'
+}
