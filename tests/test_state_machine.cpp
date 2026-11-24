@@ -70,7 +70,7 @@ void TestStateMachineTransitions() {
     sm.Update(0.016f);
     assert(sm.GetCurrentState()->GetName() == "cFrontendLoadState");
 
-    std::cout << "  -> All 8 state transitions verified successfully." << std::endl;
+    std::cout << "  -> All 8 linear state transitions across 9 concrete runtime states verified successfully." << std::endl;
 }
 
 void TestPowerplayMechanics() {

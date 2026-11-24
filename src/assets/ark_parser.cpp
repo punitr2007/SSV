@@ -65,18 +65,11 @@ void ArkArchive::Close() {
 }
 
 uint32_t ArkArchive::ComputePathHash(const std::string& path) {
-    // Normalization: lowercase and convert backslashes to forward slashes
-    std::string norm = path;
-    std::transform(norm.begin(), norm.end(), norm.begin(), [](unsigned char c) {
-        if (c == '\\') return '/';
-        return static_cast<char>(std::tolower(c));
-    });
-
-    // FNV-1a / Jenkins hybrid hash calculation
-    uint32_t hash = 0x811c9dc5;
-    for (char c : norm) {
-        hash ^= static_cast<uint8_t>(c);
-        hash *= 0x01000193;
+    // Black Rock Studio string hash at 0x00571080: hash = hash * 31 + tolower(c)
+    uint32_t hash = 0;
+    for (char c : path) {
+        char lowerC = (c == '\\') ? '/' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        hash = (hash * 31) + static_cast<uint32_t>(static_cast<unsigned char>(lowerC));
     }
     return hash;
 }

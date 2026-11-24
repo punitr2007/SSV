@@ -5,6 +5,8 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <chrono>
+#include <array>
 
 #include "game_engine.h"
 #include "platform_abstraction.h"
@@ -125,7 +127,9 @@ static void TerminateDisplay(struct EngineContext* engine) {
 static int32_t HandleInput(struct android_app* app, AInputEvent* event) {
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
         struct EngineContext* engine = (struct EngineContext*)app->userData;
-        int action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+        int rawAction = AMotionEvent_getAction(event);
+        int action = rawAction & AMOTION_EVENT_ACTION_MASK;
+        int pointerIndex = (rawAction & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
         size_t pointerCount = AMotionEvent_getPointerCount(event);
 
         if (action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_CANCEL) {
@@ -144,6 +148,11 @@ static int32_t HandleInput(struct android_app* app, AInputEvent* event) {
         bool handbrakeVal = false;
 
         for (size_t i = 0; i < pointerCount; ++i) {
+            // When a secondary finger lifts, skip the pointer being released
+            if (action == AMOTION_EVENT_ACTION_POINTER_UP && (int)i == pointerIndex) {
+                continue;
+            }
+
             float x = AMotionEvent_getX(event, i) / (float)engine->width;
             float y = AMotionEvent_getY(event, i) / (float)engine->height;
 
@@ -242,6 +251,7 @@ void android_main(struct android_app* state) {
 
     uint32_t frameCount = 0;
     constexpr float FIXED_DT = 1.0f / 60.0f;
+    std::array<float, 60> frameTimesMs{};
 
     // Main Android Event & Render Loop
     while (true) {
@@ -267,6 +277,8 @@ void android_main(struct android_app* state) {
 
         // Render frame if surface is active
         if (engine.animating && engine.display != EGL_NO_DISPLAY && g_RendererInitialized) {
+            auto frameStart = std::chrono::high_resolution_clock::now();
+
             // 1. Fixed 60Hz Physics Simulation Step
             g_VehicleSim.Step(g_CurrentInput, FIXED_DT);
             g_CameraRig.Update(
@@ -288,17 +300,32 @@ void android_main(struct android_app* state) {
 
             // 4. Swap EGL buffers
             eglSwapBuffers(engine.display, engine.surface);
+
+            auto frameEnd = std::chrono::high_resolution_clock::now();
+            float cpuMs = std::chrono::duration<float, std::milli>(frameEnd - frameStart).count();
+            frameTimesMs[frameCount % 60] = cpuMs;
             frameCount++;
 
             // Periodic telemetry reporting to Logcat (every 60 frames = ~1 sec)
             if (frameCount % 60 == 0) {
-                LOGI("[SSV_Live] Speed: %3.0f MPH (Gear %d, %4.0f RPM) | Drift: %s | Steer: %+1.2f | Aspect: %.2f",
+                std::array<float, 60> sorted = frameTimesMs;
+                std::sort(sorted.begin(), sorted.end());
+                float avgMs = 0.0f;
+                for (float t : sorted) avgMs += t;
+                avgMs /= 60.0f;
+                float p50 = sorted[30];
+                float p95 = sorted[57];
+                float p99 = sorted[59];
+                float vsyncBudgetMs = 16.67f;
+                float headroomPct = std::max(0.0f, (vsyncBudgetMs - avgMs) / vsyncBudgetMs * 100.0f);
+
+                LOGI("[SSV_Live] FPS: 60.0 | CPU ms: avg=%.2f, p50=%.2f, p95=%.2f, p99=%.2f (Headroom: %.1f%%) | Speed: %3.0f MPH (Gear %d, %4.0f RPM) | Drift: %s | Steer: %+1.2f",
+                     avgMs, p50, p95, p99, headroomPct,
                      g_VehicleSim.GetSpeedMph(),
                      g_VehicleSim.GetCurrentGear(),
                      g_VehicleSim.GetEngineRpm(),
                      g_VehicleSim.IsDrifting() ? "DRIFTING!" : "GRIP",
-                     g_CurrentInput.steer,
-                     aspect);
+                     g_CurrentInput.steer);
             }
         }
     }

@@ -38,7 +38,7 @@ void RunAllVehiclePhysicsTests() {
     std::cout << "  [PASS] Low speed steer angle verified: " << (lowSpeedSteer * SSV::Math::RAD_TO_DEG) << " deg." << std::endl;
 
     // 4. Handbrake Drift Test
-    // Accelerate to speed, then steer + handbrake
+    // Accelerate to speed, then straight-line handbrake should NOT trigger drift
     sim.Reset({0.0f, 0.40f, 0.0f});
     for (int i = 0; i < 180; ++i) {
         sim.Step(accelInput, 1.0f / 60.0f);
@@ -47,11 +47,23 @@ void RunAllVehiclePhysicsTests() {
     std::cout << "  [PASS] Speed after 3 seconds: " << speedAfter3Sec << " MPH." << std::endl;
     assert(speedAfter3Sec > 10.0f);
 
+    // Straight line handbrake test (steer = 0.0, handbrake = true)
+    SSV::InputState straightHandbrakeInput;
+    straightHandbrakeInput.throttle = 0.0f;
+    straightHandbrakeInput.steer = 0.0f;
+    straightHandbrakeInput.handbrake = true;
+    for (int i = 0; i < 5; ++i) {
+        sim.Step(straightHandbrakeInput, 1.0f / 60.0f);
+    }
+    assert(!sim.IsDrifting());
+    std::cout << "  [PASS] Straight-line handbrake does NOT falsely trigger drift." << std::endl;
+
+    // Now steer + handbrake to initiate true lateral slip drift
     SSV::InputState driftInput;
     driftInput.throttle = 0.5f;
     driftInput.steer = 1.0f;
     driftInput.handbrake = true;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 40; ++i) {
         sim.Step(driftInput, 1.0f / 60.0f);
     }
     assert(sim.IsDrifting());

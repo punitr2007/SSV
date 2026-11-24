@@ -47,6 +47,7 @@ bool VehicleRenderer::Initialize() {
     BuildGroundMesh();
     BuildChassisMesh();
     BuildWheelMesh();
+    BuildShadowDecalMesh();
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -75,6 +76,10 @@ void VehicleRenderer::Shutdown() {
     if (m_normalSpecTexture) { glDeleteTextures(1, &m_normalSpecTexture); m_normalSpecTexture = 0; }
     if (m_interiorLightsTexture) { glDeleteTextures(1, &m_interiorLightsTexture); m_interiorLightsTexture = 0; }
     if (m_damageTexture) { glDeleteTextures(1, &m_damageTexture); m_damageTexture = 0; }
+
+    if (m_shadowVao) { glDeleteVertexArrays(1, &m_shadowVao); m_shadowVao = 0; }
+    if (m_shadowVbo) { glDeleteBuffers(1, &m_shadowVbo); m_shadowVbo = 0; }
+    if (m_shadowEbo) { glDeleteBuffers(1, &m_shadowEbo); m_shadowEbo = 0; }
 
     if (m_wheelVao) { glDeleteVertexArrays(1, &m_wheelVao); m_wheelVao = 0; }
     if (m_wheelVbo) { glDeleteBuffers(1, &m_wheelVbo); m_wheelVbo = 0; }
@@ -655,6 +660,50 @@ void VehicleRenderer::BuildWheelMesh() {
     glBindVertexArray(0);
 }
 
+void VehicleRenderer::BuildShadowDecalMesh() {
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    Vector4 white = {1.0f, 1.0f, 1.0f, 1.0f};
+    Vector3 up = {0.0f, 1.0f, 0.0f};
+
+    // Ground plane decal quad spanning [-1, +1] in X and Z
+    vertices.push_back({{-1.0f, 0.0f, -1.0f}, up, white, 0.0f, 0.0f});
+    vertices.push_back({{ 1.0f, 0.0f, -1.0f}, up, white, 1.0f, 0.0f});
+    vertices.push_back({{ 1.0f, 0.0f,  1.0f}, up, white, 1.0f, 1.0f});
+    vertices.push_back({{-1.0f, 0.0f,  1.0f}, up, white, 0.0f, 1.0f});
+
+    indices.push_back(0); indices.push_back(1); indices.push_back(2);
+    indices.push_back(0); indices.push_back(2); indices.push_back(3);
+
+    m_shadowIndexCount = (uint32_t)indices.size();
+
+    glGenVertexArrays(1, &m_shadowVao);
+    glBindVertexArray(m_shadowVao);
+
+    glGenBuffers(1, &m_shadowVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, m_shadowVbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+
+    glGenBuffers(1, &m_shadowEbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_shadowEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+
+    glBindVertexArray(0);
+}
+
 void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::VehicleSimulation& vehicle, float aspectRatio, bool isBraking) {
     if (!m_initialized) return;
 
@@ -670,7 +719,9 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     Vector3 camPos = camera.GetPosition();
     glUniform3f(m_uEyePos, camPos.x, camPos.y, camPos.z);
 
-    // 1. Render Ground Plane
+    // =========================================================================
+    // PASS 1: Render Ground Arena Plane (Opaque)
+    // =========================================================================
     Matrix4x4 groundModel = Matrix4x4::Identity();
     glUniformMatrix4fv(m_uModel, 1, GL_FALSE, &groundModel.m[0][0]);
     glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -679,7 +730,36 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     glBindVertexArray(m_groundVao);
     glDrawElements(GL_TRIANGLES, m_groundIndexCount, GL_UNSIGNED_INT, nullptr);
 
-    // 2. Render Vehicle Chassis (Original Extracted Split/Second Car)
+    // =========================================================================
+    // PASS 2: Ground Contact Shadow Decal (Alpha Blended, No Depth Write)
+    // =========================================================================
+    if (m_shadowTexture != 0 && m_shadowVao != 0) {
+        glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        Vector3 pos = vehicle.GetPosition();
+        Quaternion ori = vehicle.GetOrientation();
+        // Sized to vehicle footprint: width 2.5m, length 5.2m, placed at y = 0.02m to avoid z-fighting
+        Matrix4x4 shadowModel = Matrix4x4::TRS({pos.x, 0.02f, pos.z}, ori, {1.25f, 1.0f, 2.6f});
+        glUniformMatrix4fv(m_uModel, 1, GL_FALSE, &shadowModel.m[0][0]);
+        glUniform4f(m_uTint, 0.0f, 0.0f, 0.0f, 0.75f);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_shadowTexture);
+        glUniform1i(m_uTexture, 0);
+        glUniform1i(m_uUseTexture, 1);
+
+        glBindVertexArray(m_shadowVao);
+        glDrawElements(GL_TRIANGLES, m_shadowIndexCount, GL_UNSIGNED_INT, nullptr);
+
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+    }
+
+    // =========================================================================
+    // PASS 3: Render Opaque Vehicle Chassis (Extracted Musclecar_01)
+    // =========================================================================
     Matrix4x4 chassisModel = vehicle.GetTransform();
     glUniformMatrix4fv(m_uModel, 1, GL_FALSE, &chassisModel.m[0][0]);
 
@@ -701,7 +781,30 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     glBindVertexArray(m_chassisVao);
     glDrawElements(GL_TRIANGLES, m_chassisIndexCount, m_chassisIndexType, nullptr);
 
-    // 3. Render 4 Wheels
+    // =========================================================================
+    // PASS 4: Emissive Lighting Overlay (Taillight / Brake Glow)
+    // =========================================================================
+    if (m_interiorLightsTexture != 0 && isBraking) {
+        glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE); // Additive blending for emissive glow
+
+        glUniform4f(m_uTint, 1.5f, 0.15f, 0.15f, 1.0f); // High-intensity brake red
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_interiorLightsTexture);
+        glUniform1i(m_uTexture, 0);
+        glUniform1i(m_uUseTexture, 1);
+
+        glBindVertexArray(m_chassisVao);
+        glDrawElements(GL_TRIANGLES, m_chassisIndexCount, m_chassisIndexType, nullptr);
+
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+    }
+
+    // =========================================================================
+    // PASS 5: Render 4 Wheels Articulated at .params Hardpoints
+    // =========================================================================
     if (m_wheelTexture != 0) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_wheelTexture);

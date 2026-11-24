@@ -42,6 +42,7 @@ private:
     void BuildGroundMesh();
     void BuildChassisMesh();
     void BuildWheelMesh();
+    void BuildShadowDecalMesh();
     bool LoadCookedAssets();
     void BuildProceduralChassisMesh();
     bool CompileShaders();
@@ -75,6 +76,12 @@ private:
     GLuint m_interiorLightsTexture = 0;
     GLuint m_damageTexture = 0;
     bool m_hasCookedMesh = false;
+
+    // Shadow Decal GL buffers
+    GLuint m_shadowVao = 0;
+    GLuint m_shadowVbo = 0;
+    GLuint m_shadowEbo = 0;
+    uint32_t m_shadowIndexCount = 0;
 
     // Wheel GL buffers
     GLuint m_wheelVao = 0;

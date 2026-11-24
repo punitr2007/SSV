@@ -162,9 +162,16 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
     float latVel = m_velocity.Dot(right);
     m_slipAngle = std::atan2(latVel, std::abs(forwardSpeed) + 1.0f);
 
-    if (input.handbrake || (std::abs(m_slipAngle) > 0.30f && speedMph > 20.0f)) {
+    // Drifting requires both significant lateral slip angle and forward motion:
+    // Pure straight-line handbraking locks the rear tires without initiating a drift.
+    // A drift is triggered when handbrake or aggressive steer combines with real lateral slip angle (> 0.15 rad / ~8.6 deg) at speed (> 15 MPH).
+    bool hasLateralSlip = (std::abs(m_slipAngle) > 0.15f);
+    bool sufficientSpeed = (speedMph > 15.0f);
+    bool initiatingInput = input.handbrake || (std::abs(input.steer) > 0.15f);
+
+    if (sufficientSpeed && hasLateralSlip && initiatingInput) {
         m_isDrifting = true;
-    } else if (!input.handbrake && std::abs(m_slipAngle) < 0.12f) {
+    } else if (speedMph < 10.0f || (!input.handbrake && std::abs(m_slipAngle) < 0.10f)) {
         m_isDrifting = false;
     }
 
@@ -210,8 +217,8 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
             w.suspensionLength = std::clamp(t - m_config.wheelRadius, 0.05f, m_config.suspensionRestLength);
             float compression = m_config.suspensionRestLength - w.suspensionLength;
 
-            // Compression velocity: upward relative velocity pushes into spring
-            float compressionVel = -pointVel.Dot(rayDown);
+            // Compression velocity: upward chassis motion extends spring, downward motion compresses it
+            float compressionVel = pointVel.Dot(rayDown);
 
             // Spring + Damper force: F_s = k * x + c * v_compression
             float springForceMagnitude = m_config.springK * compression + m_config.springDamping * compressionVel;
@@ -256,6 +263,8 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
             float lateralFrictionCoeff = 1.0f;
             if (m_isDrifting) {
                 lateralFrictionCoeff = w.isFront ? 0.75f : m_config.handbrakeDriftSlip;
+            } else if (input.handbrake && !w.isFront) {
+                lateralFrictionCoeff = m_config.handbrakeDriftSlip; // Handbrake breaks rear tire traction
             }
 
             float maxFriction = w.normalForce * lateralFrictionCoeff;
@@ -293,7 +302,7 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
         }
 
         // Split/Second drift yaw-rate assistance: helps rotate the car into drifts
-        if (m_isDrifting && std::abs(input.steer) > 0.05f) {
+        if ((m_isDrifting || input.handbrake) && std::abs(input.steer) > 0.05f) {
             totalTorque.y += input.steer * (m_config.mass * 12.0f);
         }
     }
