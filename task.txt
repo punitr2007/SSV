@@ -166,47 +166,31 @@ STAGE 3: Android NDK Port, Graphics/Input/Audio, & APK Build [IN PROGRESS]
 Goal: Produce a native, installable Android APK (arm64-v8a) running the 
 Split/Second engine core with SDL2, OpenGL ES 3.0, FMOD Android, and touch controls.
 
-Milestone 3.1: Android Project Scaffold & Toolchain Setup
-[ ] 3.1.1 Configure Android NDK (r25c or higher recommended) and CMake 3.22+
-[ ] 3.1.2 Create Android project directory structure:
-          `D:\Codes\Win_codes\SSV\android\`
-          ├── app/
-          │   ├── src/main/
-          │   │   ├── AndroidManifest.xml
-          │   │   ├── java/org/libsdl/app/ (SDL2 Activity & Controller)
-          │   │   ├── cpp/ (CMakeLists.txt, JNI bindings)
-          │   │   └── assets/ (resident.ark, frontendpowerplays.ark)
-          │   └── build.gradle
-          └── build.gradle, settings.gradle
-[ ] 3.1.3 Configure target ABIs: `arm64-v8a` (Primary 64-bit), `armeabi-v7a` (Optional 32-bit).
-[ ] 3.1.4 Verify cross-compilation of core logic static library (`libssv_core.a`).
+Milestone 3.1: Android Project Scaffold & Toolchain Setup [COMPLETED]
+[x] 3.1.1 Configured standalone Android cmdline-tools, NDK r25c (25.2.9519653), CMake 3.22.1, and Gradle 8.5
+[x] 3.1.2 Created Android project structure:
+          `D:\Codes\Win_codes\SSV\android\` (app/src/main/AndroidManifest.xml, cpp/CMakeLists.txt, android_main.cpp)
+[x] 3.1.3 Configured target ABIs: `arm64-v8a` (Primary 64-bit) + `armeabi-v7a` (32-bit).
+[x] 3.1.4 Built signed debug APK via `gradlew.bat assembleDebug` (3.26 MB).
 
-Milestone 3.2: SDL2 Platform Abstraction Layer (`platform_android.cpp`)
-[ ] 3.2.1 Integrate SDL2 as an Android NativeActivity submodule or prebuilt NDK library.
-[ ] 3.2.2 Implement `SSV::IPlatform` for Android:
-          - Window creation: `SDL_CreateWindow(..., SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN)`
-          - High-resolution timing: `SDL_GetPerformanceCounter()` / `SDL_GetPerformanceFrequency()`
-          - Threading: `SDL_CreateThread`, `SDL_CreateMutex` / `std::thread`
-          - File I/O: Bridge `SSV::IFile` to `SDL_RWops` and `AAssetManager_open`
-[ ] 3.2.3 Handle Android Lifecycle:
-          - `APP_CMD_PAUSE`: Suspend game simulation thread, pause audio.
-          - `APP_CMD_RESUME`: Restore simulation, reset delta-time clock.
-          - `APP_CMD_TERM_WINDOW` / `APP_CMD_INIT_WINDOW`: Surface destroy & recreate.
+Milestone 3.2: Android Platform Layer & Live Device Verification [COMPLETED]
+[x] 3.2.1 Implemented `SSV::Platform` Android layer in `src/platform/platform_android.cpp`
+[x] 3.2.2 Verified on physical device **iQOO Neo 10R** (Snapdragon 8s Gen 3, Android 16):
+          - EGL surface created at native resolution: 2696x1260 (OpenGL ES 3.0)
+          - AssetManager bound to APK assets with uncompressed direct mmap (`noCompress += ["bin", "pak"]`)
+          - Engine simulation fixed 60Hz tick running live on device.
 
-Milestone 3.3: Graphics Subsystem (Direct3D 9 -> OpenGL ES 3.0 / Vulkan)
-[ ] 3.3.1 Define hardware-independent rendering interface:
-          `include/render_backend.h` (IRenderBackend: Init, BeginFrame, DrawIndexed, EndFrame).
-[ ] 3.3.2 Implement OpenGL ES 3.0 backend:
-          `src/render/gles3/gles3_backend.cpp`
-          - Context initialization with EGL (RGB888, Depth 24, Stencil 8).
-          - Vertex Buffer Object (VBO) & Element Buffer Object (EBO) management.
-[ ] 3.3.3 Shader Translation Pipeline:
-          - Inspect binary shaders in `D:\Codes\Win_codes\Split.Second.Velocity\data\global_shader_combos`.
-          - Convert D3D9 vertex/pixel shaders to GLSL ES 3.00 via SPIRV-Cross:
-            * World geometry pass (ambient, diffuse, specular, normal maps).
-            * Car paint & reflection shader (Fresnel, environment cubemap).
-            * Particle & explosion effects (alpha blend, additive).
-[ ] 3.3.4 Render First Triangle / Textured Mesh on Android device.
+Milestone 3.3: Desktop Development Harness & 3-Layer Input Architecture [COMPLETED]
+[x] 3.3.1 Created native Win32/OpenGL 3.3 development harness (`desktop/desktop_main.cpp` -> `ssv_desktop.exe`)
+[x] 3.3.2 Implemented decoupled 3-layer input architecture (`include/input_state.h`):
+          - Layer 1/2: `InputMapper` with floating touch steering, pointer ID tracking, deadzone & power curve
+          - Layer 3: Normalized `InputState` consumed exclusively by fixed 60Hz simulation ticks
+          - `InputReplay`: Tick-by-tick recording and deterministic playback for physics regressions
+[x] 3.3.3 Disassembled D3D9 shaders (`deform.ovs`, `deform.ops`, `skin.ovs`, `skin.ops`) via `D3DDisassemble`:
+          - Proved original engine used D3D9 pixel-shader Render-to-VB for vertex deformation and skinning
+          - Translated to direct hardware vertex texture displacement in GLSL ES 3.00
+
+Milestone 3.4: "One Drivable Vehicle on Flat Plane with Real Handling Data" [IN PROGRESS]
 
 Milestone 3.4: Audio Subsystem (FMOD Core for Android)
 [ ] 3.4.1 Download FMOD Core & Studio SDK for Android (matches FMOD Ex API).
