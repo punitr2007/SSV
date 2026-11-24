@@ -4,12 +4,14 @@
 #include <iostream>
 #include <memory>
 #include <chrono>
+#include <string>
 
 #include "game_engine.h"
 #include "platform_abstraction.h"
 #include "input_state.h"
-#include "render_backend.h"
-#include "gles3_backend.h"
+#include "vehicle_physics.h"
+#include "camera_rig.h"
+#include "vehicle_renderer.h"
 
 #pragma comment(lib, "opengl32.lib")
 #pragma comment(lib, "user32.lib")
@@ -26,6 +28,9 @@ typedef BOOL (WINAPI * PFNWGLSWAPINTERVALEXTPROC)(int interval);
 
 static SSV::InputMapper g_InputMapper;
 static bool g_Running = true;
+static bool g_ResetRequested = false;
+static int g_WindowWidth = 1280;
+static int g_WindowHeight = 720;
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -34,6 +39,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_Running = false;
             PostQuitMessage(0);
             return 0;
+
+        case WM_SIZE: {
+            g_WindowWidth = LOWORD(lParam);
+            g_WindowHeight = HIWORD(lParam);
+            if (g_WindowHeight > 0) {
+                glViewport(0, 0, g_WindowWidth, g_WindowHeight);
+            }
+            return 0;
+        }
 
         case WM_KEYDOWN:
         case WM_KEYUP: {
@@ -66,6 +80,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 case '2':
                     g_InputMapper.SetKeyPowerplay2(down);
                     break;
+                case 'R':
+                    if (down) g_ResetRequested = true;
+                    break;
                 case VK_ESCAPE:
                     if (down) g_Running = false;
                     break;
@@ -78,15 +95,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 int main(int argc, char** argv) {
     std::cout << "==============================================================\n";
-    std::cout << "  SPLIT/SECOND: VELOCITY - DESKTOP SIMULATION & RENDER HARNESS\n";
+    std::cout << "  SPLIT/SECOND: VELOCITY - INTERACTIVE DRIVING & RENDER HARNESS\n";
     std::cout << "==============================================================\n";
     std::cout << "Controls:\n";
     std::cout << "  W / Up: Accelerate\n";
     std::cout << "  S / Down: Brake / Reverse\n";
     std::cout << "  A / D or Left / Right: Steer\n";
-    std::cout << "  Space: Handbrake (Drift)\n";
+    std::cout << "  Space: Handbrake (Drift Mechanic)\n";
     std::cout << "  Q / 1: Powerplay Level 1\n";
     std::cout << "  E / 2: Powerplay Level 2\n";
+    std::cout << "  R: Reset Car to Center\n";
     std::cout << "  ESC: Quit\n\n";
 
     // 1. Register Win32 Window Class
@@ -98,14 +116,12 @@ int main(int argc, char** argv) {
     RegisterClassExA(&wc);
 
     // 2. Create Window
-    int width = 1280;
-    int height = 720;
-    RECT rect = { 0, 0, width, height };
+    RECT rect = { 0, 0, g_WindowWidth, g_WindowHeight };
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
 
     HWND hwnd = CreateWindowExA(
         0, wc.lpszClassName,
-        "Split/Second: Velocity - Desktop Development Harness (OpenGL 3.3 Core)",
+        "Split/Second: Velocity - Interactive Vehicle Simulation (60 FPS)",
         WS_OVERLAPPEDWINDOW | WS_VISIBLE,
         CW_USEDEFAULT, CW_USEDEFAULT,
         rect.right - rect.left, rect.bottom - rect.top,
@@ -148,9 +164,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::cout << "[Desktop Harness] GL Vendor: " << (const char*)glGetString(GL_VENDOR) << "\n";
+    std::cout << "[Desktop Harness] GL Vendor:   " << (const char*)glGetString(GL_VENDOR) << "\n";
     std::cout << "[Desktop Harness] GL Renderer: " << (const char*)glGetString(GL_RENDERER) << "\n";
-    std::cout << "[Desktop Harness] GL Version: " << (const char*)glGetString(GL_VERSION) << "\n";
+    std::cout << "[Desktop Harness] GL Version:  " << (const char*)glGetString(GL_VERSION) << "\n";
 
     // Enable VSync
     auto wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
@@ -158,20 +174,35 @@ int main(int argc, char** argv) {
         wglSwapIntervalEXT(1);
     }
 
-    // 5. Initialize Engine
+    // 5. Initialize Engine Subsystems
     SSV::Core::GameEngine engine;
     SSV::Platform::WindowDesc desc;
     desc.title = "Split/Second Desktop";
-    desc.width = width;
-    desc.height = height;
+    desc.width = g_WindowWidth;
+    desc.height = g_WindowHeight;
     desc.fullscreen = false;
     engine.Initialize(desc, false);
 
-    // 6. Main Loop with Fixed 60 Hz Timestep
+    // 6. Initialize Vehicle Simulation, Chase Camera, and 3D Renderer
+    SSV::Physics::VehicleSimulation vehicleSim;
+    vehicleSim.Reset({0.0f, 0.40f, 0.0f});
+
+    SSV::CameraRig cameraRig;
+    cameraRig.Reset(vehicleSim.GetPosition(), vehicleSim.GetOrientation());
+
+    SSV::VehicleRenderer renderer;
+    if (!renderer.Initialize()) {
+        std::cerr << "[Desktop Harness] Error: Failed to initialize vehicle renderer!\n";
+        return 1;
+    }
+
+    // 7. Main Loop with Fixed 60 Hz Timestep
     constexpr double FIXED_TIMESTEP = 1.0 / 60.0;
     auto lastTime = std::chrono::high_resolution_clock::now();
     double accumulator = 0.0;
     uint32_t currentTick = 0;
+    uint32_t frameCount = 0;
+    SSV::InputState lastInput;
 
     while (g_Running) {
         MSG msg;
@@ -180,26 +211,62 @@ int main(int argc, char** argv) {
             DispatchMessageA(&msg);
         }
 
+        if (g_ResetRequested) {
+            vehicleSim.Reset({0.0f, 0.40f, 0.0f});
+            cameraRig.Reset(vehicleSim.GetPosition(), vehicleSim.GetOrientation());
+            g_ResetRequested = false;
+            std::cout << "[Desktop Harness] Vehicle position reset to origin.\n";
+        }
+
         auto currentTime = std::chrono::high_resolution_clock::now();
         double frameTime = std::chrono::duration<double>(currentTime - lastTime).count();
         lastTime = currentTime;
         accumulator += frameTime;
 
-        // Fixed simulation ticks
+        // Fixed simulation ticks (60 Hz)
         while (accumulator >= FIXED_TIMESTEP) {
-            SSV::InputState input = g_InputMapper.Sample(currentTick);
+            lastInput = g_InputMapper.Sample(currentTick);
+
+            vehicleSim.Step(lastInput, static_cast<float>(FIXED_TIMESTEP));
+            cameraRig.Update(
+                vehicleSim.GetPosition(),
+                vehicleSim.GetOrientation(),
+                vehicleSim.GetSpeedMph(),
+                static_cast<float>(FIXED_TIMESTEP)
+            );
+
             engine.StepFrame(static_cast<float>(FIXED_TIMESTEP));
             accumulator -= FIXED_TIMESTEP;
             currentTick++;
         }
 
         // Render pass
-        glClearColor(0.08f, 0.08f, 0.12f, 1.0f);
+        glClearColor(0.06f, 0.07f, 0.10f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        float aspectRatio = (float)g_WindowWidth / (float)(g_WindowHeight > 0 ? g_WindowHeight : 1);
+        bool isBraking = (lastInput.brake > 0.05f || lastInput.handbrake);
+        renderer.RenderScene(cameraRig, vehicleSim, aspectRatio, isBraking);
+
         SwapBuffers(hdc);
+        frameCount++;
+
+        // Live Telemetry update on Window Title (every 10 frames)
+        if (frameCount % 10 == 0) {
+            char titleBuf[256];
+            snprintf(titleBuf, sizeof(titleBuf),
+                "Split/Second | Speed: %3.0f MPH (Gear %d, %4.0f RPM) | Drift: %s | Steer: %+1.2f | [R] Reset",
+                vehicleSim.GetSpeedMph(),
+                vehicleSim.GetCurrentGear(),
+                vehicleSim.GetEngineRpm(),
+                vehicleSim.IsDrifting() ? "DRIFTING!" : "GRIP",
+                lastInput.steer
+            );
+            SetWindowTextA(hwnd, titleBuf);
+        }
     }
 
+    renderer.Shutdown();
     engine.Stop();
     wglMakeCurrent(nullptr, nullptr);
     wglDeleteContext(glContext);

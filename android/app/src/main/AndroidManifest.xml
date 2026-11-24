@@ -19,7 +19,7 @@
             android:name="android.app.NativeActivity"
             android:exported="true"
             android:label="Split/Second"
-            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|density"
             android:screenOrientation="sensorLandscape">
 
             <!-- Tell NativeActivity the name of our .so library -->

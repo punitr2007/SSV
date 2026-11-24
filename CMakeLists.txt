@@ -17,6 +17,8 @@ add_library(ssv_core STATIC
     src/assets/ark_parser.cpp
     src/core/state_machine.cpp
     src/core/game_engine.cpp
+    src/core/vehicle_physics.cpp
+    src/core/camera_rig.cpp
 )
 
 # Test Suite Executable
@@ -25,6 +27,7 @@ add_executable(ssv_tests
     tests/test_math.cpp
     tests/test_state_machine.cpp
     tests/test_ark_parser.cpp
+    tests/test_vehicle_physics.cpp
 )
 
 target_link_libraries(ssv_tests PRIVATE ssv_core)

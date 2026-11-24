@@ -10,6 +10,7 @@ include_directories(
     "${SSV_ROOT}/include"
     "${SSV_ROOT}/src/core"
     "${SSV_ROOT}/src/assets"
+    "${SSV_ROOT}/src/render"
     "${SSV_ROOT}/src/render/gles3"
     "${ANDROID_NDK}/sources/android/native_app_glue"
 )
@@ -19,6 +20,10 @@ set(SSV_SOURCES
     "${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
     "${SSV_ROOT}/src/platform/platform_android.cpp"
     "${SSV_ROOT}/src/render/gles3/gles3_backend.cpp"
+    "${SSV_ROOT}/src/render/vehicle_renderer.cpp"
+    "${SSV_ROOT}/src/render/gl_platform.cpp"
+    "${SSV_ROOT}/src/core/vehicle_physics.cpp"
+    "${SSV_ROOT}/src/core/camera_rig.cpp"
     "${SSV_ROOT}/src/assets/ark_parser.cpp"
     "${SSV_ROOT}/src/assets/lzss_decomp.cpp"
     "${SSV_ROOT}/src/core/game_engine.cpp"

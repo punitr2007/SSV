@@ -176,6 +176,8 @@ struct Matrix4x4 {
         r.m[3][2] = (-zNear * zFar) / (zFar - zNear);
         return r;
     }
+
+    static Matrix4x4 TRS(const Vector3& t, const struct Quaternion& q, const Vector3& s = {1, 1, 1});
 };
 
 struct Quaternion {
@@ -196,6 +198,48 @@ struct Quaternion {
         return {n.x * s, n.y * s, n.z * s, std::cos(half)};
     }
 
+    static Quaternion FromEuler(float pitch, float yaw, float roll) {
+        float cy = std::cos(yaw * 0.5f);
+        float sy = std::sin(yaw * 0.5f);
+        float cp = std::cos(pitch * 0.5f);
+        float sp = std::sin(pitch * 0.5f);
+        float cr = std::cos(roll * 0.5f);
+        float sr = std::sin(roll * 0.5f);
+
+        Quaternion q;
+        q.w = cr * cp * cy + sr * sp * sy;
+        q.x = sr * cp * cy - cr * sp * sy;
+        q.y = cr * sp * cy + sr * cp * sy;
+        q.z = cr * cp * sy - sr * sp * cy;
+        return q;
+    }
+
+    Quaternion operator*(const Quaternion& o) const {
+        return {
+            w * o.x + x * o.w + y * o.z - z * o.y,
+            w * o.y - x * o.z + y * o.w + z * o.x,
+            w * o.z + x * o.y - y * o.x + z * o.w,
+            w * o.w - x * o.x - y * o.y - z * o.z
+        };
+    }
+
+    Quaternion operator+(const Quaternion& o) const {
+        return {x + o.x, y + o.y, z + o.z, w + o.w};
+    }
+
+    Quaternion operator*(float s) const {
+        return {x * s, y * s, z * s, w * s};
+    }
+
+    Quaternion Normalized() const {
+        float lenSq = x * x + y * y + z * z + w * w;
+        if (lenSq > 1e-8f) {
+            float inv = 1.0f / std::sqrt(lenSq);
+            return {x * inv, y * inv, z * inv, w * inv};
+        }
+        return Identity();
+    }
+
     Vector3 Rotate(const Vector3& v) const {
         Vector3 u(x, y, z);
         float s = w;
@@ -203,7 +247,33 @@ struct Quaternion {
                v * (s * s - u.Dot(u)) +
                u.Cross(v) * (2.0f * s);
     }
+
+    Vector3 Forward() const { return Rotate({0.0f, 0.0f, 1.0f}); }
+    Vector3 Up() const { return Rotate({0.0f, 1.0f, 0.0f}); }
+    Vector3 Right() const { return Rotate({1.0f, 0.0f, 0.0f}); }
+
+    Matrix4x4 ToMatrix4x4() const {
+        Vector3 r = Right();
+        Vector3 u = Up();
+        Vector3 f = Forward();
+
+        Matrix4x4 m = {};
+        m.m[0][0] = r.x; m.m[0][1] = r.y; m.m[0][2] = r.z; m.m[0][3] = 0.0f;
+        m.m[1][0] = u.x; m.m[1][1] = u.y; m.m[1][2] = u.z; m.m[1][3] = 0.0f;
+        m.m[2][0] = f.x; m.m[2][1] = f.y; m.m[2][2] = f.z; m.m[2][3] = 0.0f;
+        m.m[3][0] = 0.0f; m.m[3][1] = 0.0f; m.m[3][2] = 0.0f; m.m[3][3] = 1.0f;
+        return m;
+    }
 };
+
+inline Matrix4x4 Matrix4x4::TRS(const Vector3& t, const Quaternion& q, const Vector3& s) {
+    Matrix4x4 r = q.ToMatrix4x4();
+    r.m[0][0] *= s.x; r.m[0][1] *= s.x; r.m[0][2] *= s.x;
+    r.m[1][0] *= s.y; r.m[1][1] *= s.y; r.m[1][2] *= s.y;
+    r.m[2][0] *= s.z; r.m[2][1] *= s.z; r.m[2][2] *= s.z;
+    r.m[3][0] = t.x;  r.m[3][1] = t.y;  r.m[3][2] = t.z;
+    return r;
+}
 
 struct Ray {
     Vector3 origin;

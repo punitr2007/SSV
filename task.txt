@@ -190,37 +190,55 @@ Milestone 3.3: Desktop Development Harness & 3-Layer Input Architecture [COMPLET
           - Proved original engine used D3D9 pixel-shader Render-to-VB for vertex deformation and skinning
           - Translated to direct hardware vertex texture displacement in GLSL ES 3.00
 
-Milestone 3.4: "One Drivable Vehicle on Flat Plane with Real Handling Data" [IN PROGRESS]
+Milestone 3.4: "One Drivable Vehicle on Flat Plane with Real Handling Data" [COMPLETED]
+[x] 3.4.1 Implemented `VehicleSimulation` (`include/vehicle_physics.h` & `src/core/vehicle_physics.cpp`):
+          - Reverse-engineered vehicle tuning constants from `SplitSecond.exe`:
+            * Mass: 3000 lbs (1360 kg) at RVA `0x00BC202C`
+            * TopSpeed: 200 MPH (89.4 m/s) at RVA `0x00BA62C0`
+            * Max Steer Angle: 35.0 deg (speed-attenuated) at RVA `0x00C1A5A8`
+            * SpringK: 100.0, SpringDamping: 100.0 at RVA `0x00BC3C84`
+            * SpringLength: 2.0 at RVA `0x00BC4E78`
+            * HardPoints Z: +/-4.0 at RVA `0x00C2382C` / `0x00BB3438`
+          - 4-wheel raycast suspension with critically damped compression spring forces
+          - Speed-sensitive steering attenuation (35 deg at low speeds, 10 deg at 200 MPH)
+          - 6-speed automatic transmission model with gear speed ranges and dynamic RPM curves
+          - Lateral tire slip and handbrake drift mechanic (drops lateral friction to 0.35 for controlled powerslides)
+[x] 3.4.2 Implemented Dynamic Chase Camera Rig (`include/camera_rig.h` & `src/core/camera_rig.cpp`):
+          - Spring-damped vehicle tracking (5.8m distance, 2.1m height, hood lookahead)
+          - Laggy yaw smoothing allowing sideways visibility during high-angle drifts
+          - Speed-dependent dynamic FOV widening from 62 deg at rest to 78 deg at 200 MPH
+          - High-speed micro-vibrations and camera shake above 80 MPH
+[x] 3.4.3 Implemented Cross-Platform 3D Renderer (`src/render/vehicle_renderer.h` & `.cpp`, `include/gl_platform.h`):
+          - Unified GLSL shaders for OpenGL 3.3 Core (Desktop) and OpenGL ES 3.0 (Android)
+          - 800m x 800m checkered tarmac arena with racing stripes and asphalt texturing
+          - Detailed multi-part sports car chassis (wedge fuselage, tinted cockpit, carbon splitter, diffuser, dual rear wing, xenon headlights, and active glowing brake lights)
+          - 4 independently articulated 3D wheels with tire tread and alloy rims displaying suspension travel, steering angle, and wheel roll
+[x] 3.4.4 Integrated Desktop Development Harness (`desktop/desktop_main.cpp` -> `ssv_desktop.exe`):
+          - Verified interactive driving with keyboard/gamepad (W/S/A/D, Arrows, Space for Handbrake, R for Reset)
+          - Real-time window title telemetry (Speed, Gear, RPM, Drift status, Steer angle)
+[x] 3.4.5 Unit Test Suite Verification (`tests/test_vehicle_physics.cpp` -> `test_runner.exe`):
+          - 100% of unit tests pass (Math, State Machine, LZSS, Ark Archive, Vehicle Acceleration, Steering, Drift, and Camera FOV)
+[x] 3.4.6 Verified on Physical Android Device (**iQOO Neo 10R**, Snapdragon 8s Gen 3, Adreno 735):
+          - Built APK with Gradle wrapper (`app-debug.apk`)
+          - Installed via ADB (`10BF3A1T320013Z`)
+          - Verified stable, locked 60.0 FPS rendering and simulation at native `2696x1260` resolution
+          - Multi-touch virtual controls (left screen steering slider, right screen throttle/brake/handbrake)
 
-Milestone 3.4: Audio Subsystem (FMOD Core for Android)
-[ ] 3.4.1 Download FMOD Core & Studio SDK for Android (matches FMOD Ex API).
-[ ] 3.4.2 Place `libfmod.so` and `fmod.h` into `android/app/src/main/jniLibs/arm64-v8a/`.
-[ ] 3.4.3 Initialize FMOD System with OpenSL ES output on Android.
-[ ] 3.4.4 Bridge asset loader so FMOD reads sound banks directly from APK assets or extracted cache.
-[ ] 3.4.5 Verify in-game music and sound effects playback.
+Milestone 3.5: Audio Subsystem (FMOD Core for Android) [PENDING]
+[ ] 3.5.1 Download FMOD Core & Studio SDK for Android (matches FMOD Ex API).
+[ ] 3.5.2 Place `libfmod.so` and `fmod.h` into `android/app/src/main/jniLibs/arm64-v8a/`.
+[ ] 3.5.3 Initialize FMOD System with OpenSL ES output on Android.
+[ ] 3.5.4 Bridge asset loader so FMOD reads sound banks directly from APK assets or extracted cache.
+[ ] 3.5.5 Verify in-game music and sound effects playback.
 
-Milestone 3.5: Input Subsystem (Touch Virtual Controls & Gamepad)
-[ ] 3.5.1 Implement virtual touch overlay:
-          - Left thumb zone: Steering slider / Virtual analog stick (or Device Gyroscope tilt).
-          - Right thumb zone: Throttle (Accelerate), Footbrake (Reverse), Handbrake (Drift).
-          - Dedicated Powerplay Trigger Buttons:
-            * Level 1 Powerplay (Blue icon trigger).
-            * Level 2 Super Powerplay (Red icon trigger).
-[ ] 3.5.2 Integrate SDL2 GameController API for physical USB / Bluetooth gamepads (Xbox, DualShock).
+Milestone 3.6: Asset Cooker & Real Game Mesh Rendering [PENDING]
+[ ] 3.6.1 Extract vehicle mesh geometry and textures from `resident.ark` using `ssv_cooker.py`.
+[ ] 3.6.2 Transcode textures to ETC2/ASTC GPU-native formats.
+[ ] 3.6.3 Render real vehicle model on screen in Desktop and Android harnesses.
 
-Milestone 3.6: Physics & Vehicle Dynamics Adaptor
-[ ] 3.6.1 Extract vehicle suspension, spring rates, and tire friction from binary RTTI classes
-          (`cVehiclePhysicsState`, `cCar`, `cRigidBody`).
-[ ] 3.6.2 Implement vehicle raycast suspension controller running in the fixed 60Hz tick.
-[ ] 3.6.3 Bind vehicle steering, acceleration, and braking inputs to the vehicle state.
-
-Milestone 3.7: Asset Packaging, Gradle Build, & Device Testing
-[ ] 3.7.1 Asset Packaging:
-          - Bundle `resident.ark` (~50 MB core assets) into `assets/`.
-          - Stream track `.ark` archives from device external storage (`/sdcard/Android/data/...`).
-[ ] 3.7.2 Run `./gradlew assembleDebug` to build `SplitSecond-debug.apk`.
-[ ] 3.7.3 Deploy via ADB: `adb install -r SplitSecond-debug.apk`.
-[ ] 3.7.4 Validate first frame, input response, and audio on live Android device/emulator.
+Milestone 3.7: Track Geometry & Playable Lap [PENDING]
+[ ] 3.7.1 Extract track mesh and collision hulls from track archives.
+[ ] 3.7.2 Drive car along full track circuit with collision and checkpoints.
 
 ================================================================================
 AUTOMATED GHIDRA HEADLESS SCRIPT REFERENCE
@@ -241,3 +259,57 @@ Key Binary Locations in SplitSecond.exe:
 - 0x00BA38C0 : cFrontendRunState Vtable
 - 0x00BA36A4 : cInGameRunState Vtable
 - 0x00C4AA64 : Engine Mutex ("Global\\DISNEYATVPUREPC")
+
+
+More infos about the tasks that are must be kept in mind for future work:
+# The following information is from 
+Here's a single consolidated prompt. I dropped the emulation and Winlator idea entirely and added the project's current state, so the agent doesn't redo finished work.
+
+```
+You are a reverse-engineering and porting engineer. Goal: a native Android ARM64 port of Split/Second: Velocity (SplitSecond.exe, Windows x86, Direct3D 9) that runs on a physical phone. No emulation or translation layers (no Wine, Winlator, Box64, DXVK, ANGLE-on-D3D). Everything must be native C++ against the NDK, GLES 3.0, and Android audio/input APIs.
+
+## Project context (already done, do not redo)
+- Repo: <REPO_PATH> (github.com/punitr2007/SSV). Game files: <GAME_DIR>. Binary: <GAME_EXE>.
+- Android: NativeActivity + custom HAL, GLES3 backend behind IRenderBackend, command-line SDK/NDK r25c, Gradle 8.5. assembleDebug works; boots on iQOO Neo 10R (Snapdragon 8s Gen 3).
+- .ark format decoded (20-byte TOC entries sorted by name hash, LZSS), verified on real entries. Offline cooker (tools/ssv_cooker.py) writes stored, GPU-ready bundles.
+- Input: InputMapper -> InputState -> fixed 60 Hz sim, with replay. Windows desktop harness (ssv_desktop.exe) shares the engine code.
+- Read the repo and its notes first. Treat them as the map.
+
+## Working method
+Work through the phases below in order. At the end of each phase, stop and report: what was CONFIRMED (cite function address / file / log line), what is INFERRED, and what is UNKNOWN or BLOCKED (state the exact missing evidence). Do not continue to the next phase until the current gate passes.
+
+Rules for every phase:
+- Do not invent behaviour. If decompilation is incomplete, mark BLOCKED. A stub that compiles but silently does nothing is worse than an explicit UNKNOWN; stubs must log loudly.
+- Cite original RVAs for every lifted function, struct field offset, and constant.
+- Keep the simulation core free of Win32, D3D, and GL headers. Rendering, audio, and input go through small interfaces.
+- Do not commit game assets or copyrighted data. The cooker reads the user's own game files; the repo ships code only.
+
+## Phase 1: Portability audit (analysis only, no code)
+Report engine availability and versions (Ghidra/IDA). Then: PE triage (arch, entry point, sections, packing signs), import map classified as PORTABLE / NEEDS-SHIM / MUST-REWRITE / UNKNOWN, graphics API fingerprint (fixed-function vs shaders), game-loop and threading model, asset I/O paths and save locations. Verdict: biggest three blockers and the three subsystems to port first.
+Gate: the audit is written to PORTING_NOTES.md with evidence.
+
+## Phase 2: Simulation core
+Lift one subsystem at a time (first: vehicle physics and handling, then collision, race state, powerplays, AI). For each, produce: function inventory (RVA, pseudocode, portable C++), struct map with offsets, constants table with load addresses, and per-tick update order.
+Deliverables: core/ static library with CMake, a test harness that replays recorded InputState and checks state, and a PORTING_NOTES.md listing lifted, stubbed, and UNKNOWN functions.
+Gate: replayed input produces deterministic state, and values (e.g. handling curves) match the original constants.
+
+## Phase 3: Rendering and assets
+Replace D3D9 draw paths with GLES3 equivalents behind IRenderBackend. Start with one path: a real mesh from the .ark files, textured, on screen on desktop and on the phone. Port the D3D9 shaders using the disassembled instruction stream (not just constant names). Cook meshes and textures (ETC2/ASTC) offline; map them at load, with no runtime decompression during gameplay.
+Gate: one real car renders correctly on the phone, with frame time reported.
+
+## Phase 4: Playable loop
+Drive the car (touch, gamepad, keyboard on desktop) on a real track with collision, camera, HUD, then race rules, AI, powerplays and the deformation write path.
+Gate: a full lap is playable on the phone.
+
+## Phase 5: Audio, UI, lifecycle
+Decode audio offline and play via Oboe/AAudio. Port frontend menus with touch navigation. Handle pause/resume, GL context loss, and app-specific storage only.
+Gate: backgrounding and resuming the app loses no state.
+
+## Validation (every phase)
+Install via adb on the phone and report evidence from logcat and measured frame times. Note which behaviours could not be verified without the original build.
+```
+
+**Assumptions I made, so you can change them:**
+- The approach is decompile-guided native rebuild, not static recompilation. Phase 1 still asks for a verdict, but the rest assumes the rebuild route.
+- It keeps your existing NativeActivity setup instead of switching to SDL2. If you'd rather use SDL2, replace the "Android" bullet with the SDL2 scaffold from your original Stage 3.
+- I added the rule not to commit game assets, since redistributing them would be a legal problem.
