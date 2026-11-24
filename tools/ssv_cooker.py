@@ -275,6 +275,108 @@ def cook_musclecar(cooker: SSVPakWriter, base_dir: str):
         else:
             print(f"  [-] Texture file missing: {file_path}")
 
+
+def cook_track_sector(cooker: SSVPakWriter, base_dir: str):
+    """Decodes original Split/Second Airport Terminal sector geometry into GPU mesh."""
+    static_ark_path = r"D:\Codes\Win_codes\Split.Second.Velocity\data\environments\levels\airport_test_03\sectors\airport_test_03.static.ark"
+    if not os.path.exists(static_ark_path):
+        print(f"  [-] Track static ark not found: {static_ark_path}")
+        return
+
+    # Extract Model 214 (Airport Terminal Start Straight Road Segment)
+    with open(static_ark_path, "rb") as f:
+        f.seek(16 + 214 * 20)
+        usz, h, fl, off, csz = struct.unpack('<5I', f.read(20))
+        f.seek(off)
+        data = f.read(csz)
+
+    ib_start = 0x09D0
+    ibo_sz = 15208
+    vb_start = ib_start + ibo_sz
+    v_count = 264
+    stride = 24
+
+    vb_data = data[vb_start : vb_start + v_count * stride]
+    ib_data = data[ib_start : ib_start + ibo_sz]
+
+    indices = struct.unpack(f"<{ibo_sz//2}H", ib_data)
+    tris = []
+    wind = 0
+    for i in range(len(indices) - 2):
+        i0, i1, i2 = indices[i], indices[i+1], indices[i+2]
+        if i0 == 0xFFFF or i1 == 0xFFFF or i2 == 0xFFFF:
+            wind = 0
+            continue
+        if i0 == i1 or i1 == i2 or i0 == i2:
+            wind = 0
+            continue
+        if i0 >= v_count or i1 >= v_count or i2 >= v_count:
+            wind = 0
+            continue
+        if wind % 2 == 1:
+            tris.append((i0, i2, i1))
+        else:
+            tris.append((i0, i1, i2))
+        wind += 1
+
+    # Extract vertex positions and UVs
+    vert_positions = []
+    vert_uvs = []
+    for vi in range(v_count):
+        raw = vb_data[vi*stride : (vi+1)*stride]
+        x, y, z = struct.unpack('<3f', raw[4:16])
+        u, v_tex = struct.unpack('<2e', raw[16:20])
+        vert_positions.append((x, y, z))
+        vert_uvs.append((float(u), float(v_tex)))
+
+    # Calculate smooth vertex normals
+    vert_normals = [[0.0, 0.0, 0.0] for _ in range(v_count)]
+    for i0, i1, i2 in tris:
+        p0 = vert_positions[i0]
+        p1 = vert_positions[i1]
+        p2 = vert_positions[i2]
+        e1 = (p1[0]-p0[0], p1[1]-p0[1], p1[2]-p0[2])
+        e2 = (p2[0]-p0[0], p2[1]-p0[1], p2[2]-p0[2])
+        fn = (
+            e1[1]*e2[2] - e1[2]*e2[1],
+            e1[2]*e2[0] - e1[0]*e2[2],
+            e1[0]*e2[1] - e1[1]*e2[0]
+        )
+        for idx in (i0, i1, i2):
+            vert_normals[idx][0] += fn[0]
+            vert_normals[idx][1] += fn[1]
+            vert_normals[idx][2] += fn[2]
+
+    for vi in range(v_count):
+        n = vert_normals[vi]
+        length = math.sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2])
+        if length > 1e-6:
+            vert_normals[vi] = (n[0]/length, n[1]/length, n[2]/length)
+        else:
+            vert_normals[vi] = (0.0, 1.0, 0.0)
+
+    flat_indices = []
+    for tri in tris:
+        flat_indices.extend(tri)
+
+    # Pack 64-byte GPU Vertex format
+    vbo_out = bytearray()
+    for vi in range(v_count):
+        px, py, pz = vert_positions[vi]
+        nx, ny, nz = vert_normals[vi]
+        u, v_tex = vert_uvs[vi]
+        vbo_out.extend(struct.pack('<3f3f4f2f4f',
+            px, py, pz,
+            nx, ny, nz,
+            0.22, 0.22, 0.24, 1.0,
+            u, v_tex,
+            0.0, 0.0, 0.0, 0.0
+        ))
+
+    ebo_out = struct.pack(f"<{len(flat_indices)}H", *flat_indices)
+    cooker.add_mesh("models/tracks/airport_sector_0", vbo_out, ebo_out, vertex_stride=64, is_32bit_index=False)
+    print(f"  [+] Cooked Airport Track Sector: {v_count} verts, {len(tris)} tris ({len(flat_indices)} indices)")
+
 def main():
     print("======================================================")
     print("   SPLIT/SECOND: VELOCITY - GPU ASSET COOKER         ")
@@ -299,6 +401,9 @@ def main():
 
         # 2. Cook original Musclecar_01 vehicle mesh & all 6 textures
         cook_musclecar(cooker, base_dir)
+
+        # 3. Cook real Airport Terminal track sector geometry
+        cook_track_sector(cooker, base_dir)
 
         cooker.build()
 

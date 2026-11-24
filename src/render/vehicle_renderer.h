@@ -89,6 +89,23 @@ private:
     GLuint m_wheelEbo = 0;
     uint32_t m_wheelIndexCount = 0;
 
+    // Track sector GL buffers & collision
+    GLuint m_trackVao = 0;
+    GLuint m_trackVbo = 0;
+    GLuint m_trackEbo = 0;
+    uint32_t m_trackIndexCount = 0;
+    GLenum m_trackIndexType = GL_UNSIGNED_SHORT;
+    bool m_hasTrackMesh = false;
+    Vector3 m_trackSpawnPoint{-97.21f, 3.50f, 132.0f};
+    std::vector<Physics::RoadTriangle> m_roadTriangles;
+
+public:
+    bool HasTrackMesh() const { return m_hasTrackMesh; }
+    const Vector3& GetTrackSpawnPoint() const { return m_trackSpawnPoint; }
+    const std::vector<Physics::RoadTriangle>& GetRoadTriangles() const { return m_roadTriangles; }
+
+private:
+
     bool m_initialized = false;
 };
 

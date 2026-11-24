@@ -89,15 +89,26 @@ static int InitDisplay(struct EngineContext* engine) {
     if (!g_RendererInitialized) {
         if (g_Renderer.Initialize()) {
             g_RendererInitialized = true;
-            LOGI("[SSV_Main] Vehicle & Flat Plane 3D Renderer initialized on Android.");
+            LOGI("[SSV_Main] Vehicle & Environment 3D Renderer initialized on Android.");
         } else {
             LOGE("[SSV_Main] Failed to initialize 3D Renderer!");
         }
     }
 
-    // Reset vehicle simulation and chase camera
-    g_VehicleSim.Reset({0.0f, 0.40f, 0.0f});
-    g_CameraRig.Reset(g_VehicleSim.GetPosition(), g_VehicleSim.GetOrientation());
+    // Spawn vehicle on real 3D track mesh if loaded, otherwise fallback to flat plane
+    if (g_Renderer.HasTrackMesh()) {
+        g_VehicleSim.SetRoadCollision(g_Renderer.GetRoadTriangles());
+        g_VehicleSim.Reset(g_Renderer.GetTrackSpawnPoint());
+        g_CameraRig.Reset(g_VehicleSim.GetPosition(), g_VehicleSim.GetOrientation());
+        LOGI("[SSV_Main] Vehicle spawned on 3D Track at (%.2f, %.2f, %.2f) with %zu collision triangles.",
+             g_Renderer.GetTrackSpawnPoint().x,
+             g_Renderer.GetTrackSpawnPoint().y,
+             g_Renderer.GetTrackSpawnPoint().z,
+             g_Renderer.GetRoadTriangles().size());
+    } else {
+        g_VehicleSim.Reset({0.0f, 0.40f, 0.0f});
+        g_CameraRig.Reset(g_VehicleSim.GetPosition(), g_VehicleSim.GetOrientation());
+    }
 
     return 0;
 }

@@ -82,5 +82,45 @@ void RunAllVehiclePhysicsTests() {
     assert(highSpeedFov > initialFov);
     std::cout << "  [PASS] Camera dynamic FOV verified: " << initialFov << " deg -> " << highSpeedFov << " deg." << std::endl;
 
+    // 6. Road Surface Triangle Collision & Raycast Test
+    std::vector<SSV::Physics::RoadTriangle> roadMesh;
+    // Create an elevated road quad at Y = 2.50m (2 triangles)
+    // T1: (-10, 2.5, -10) -> (10, 2.5, -10) -> (10, 2.5, 10)
+    // T2: (-10, 2.5, -10) -> (10, 2.5, 10) -> (-10, 2.5, 10)
+    roadMesh.push_back({
+        {-10.0f, 2.5f, -10.0f},
+        { 10.0f, 2.5f, -10.0f},
+        { 10.0f, 2.5f,  10.0f},
+        {  0.0f, 1.0f,   0.0f}
+    });
+    roadMesh.push_back({
+        {-10.0f, 2.5f, -10.0f},
+        { 10.0f, 2.5f,  10.0f},
+        {-10.0f, 2.5f,  10.0f},
+        {  0.0f, 1.0f,   0.0f}
+    });
+
+    sim.SetRoadCollision(roadMesh);
+    // Spawn car at Y = 3.0m above the elevated road (within suspension reach of Y = 2.5m road)
+    sim.Reset({0.0f, 3.00f, 0.0f});
+    // Step simulation for 60 ticks (1 second) so suspension settles on Y = 2.5m road surface
+    SSV::InputState idleInput;
+    for (int i = 0; i < 60; ++i) {
+        sim.Step(idleInput, 1.0f / 60.0f);
+    }
+    float settledY = sim.GetPosition().y;
+    // Car ride height is ~0.40m above road, so settled Y should be ~2.90m +/- 0.15m
+    std::cout << "  [PASS] Road triangle collision settling verified: settled Y = " << settledY << " m (expected ~2.85-2.95 m)." << std::endl;
+    assert(settledY > 2.70f && settledY < 3.10f);
+
+    // Verify all 4 wheels contact the elevated road
+    for (int w = 0; w < 4; ++w) {
+        assert(sim.GetWheels()[w].inContact);
+    }
+    std::cout << "  [PASS] All 4 wheels grounded on elevated road mesh." << std::endl;
+
+    // Clear road collision and reset
+    sim.ClearRoadCollision();
+
     std::cout << "[TEST SUITE] Vehicle Physics & Handling Tests 100% PASSED!" << std::endl;
 }

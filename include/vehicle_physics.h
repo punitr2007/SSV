@@ -14,6 +14,7 @@
 #include "math_types.h"
 #include "input_state.h"
 #include <array>
+#include <vector>
 #include <cmath>
 
 namespace SSV {
@@ -22,6 +23,16 @@ namespace Physics {
 using Math::Vector3;
 using Math::Matrix4x4;
 using Math::Quaternion;
+
+struct RoadTriangle {
+    Vector3 v0;
+    Vector3 v1;
+    Vector3 v2;
+    Vector3 normal;
+    float minX = 0.0f, maxX = 0.0f;
+    float minY = 0.0f, maxY = 0.0f;
+    float minZ = 0.0f, maxZ = 0.0f;
+};
 
 struct VehicleConfig {
     float mass = 1360.0f;               // 3000 lbs (from binary 0x00BC202C)
@@ -70,6 +81,12 @@ public:
     void Reset(const Vector3& spawnPosition = {0.0f, 0.5f, 0.0f});
     void Step(const InputState& input, float dt);
 
+    // --- Road Collision & Ground Terrain ---
+    void SetRoadCollision(const std::vector<RoadTriangle>& triangles);
+    void ClearRoadCollision();
+    bool HasRoadCollision() const { return !m_roadTriangles.empty(); }
+    const std::vector<RoadTriangle>& GetRoadCollision() const { return m_roadTriangles; }
+
     // --- State Getters ---
     const Vector3& GetPosition() const { return m_position; }
     const Vector3& GetVelocity() const { return m_velocity; }
@@ -95,6 +112,7 @@ private:
     Vector3 m_angularVelocity{0.0f, 0.0f, 0.0f};
 
     std::array<Wheel, 4> m_wheels;
+    std::vector<RoadTriangle> m_roadTriangles;
 
     float m_engineRpm = 1000.0f;
     int m_currentGear = 1;

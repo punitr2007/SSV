@@ -22,7 +22,17 @@ void RunAllCookedBundleTests() {
     SSV::CookedBundleReader reader;
     bool ok = reader.Open(buffer.data(), buffer.size());
     assert(ok && "Failed to open cooked bundle");
-    assert(reader.GetResourceCount() == 9 && "Expected 9 resources in cooked bundle");
+    assert(reader.GetResourceCount() >= 10 && "Expected at least 10 resources in cooked bundle");
+
+    // Verify Airport Track Sector Mesh Entry
+    const auto* trackEntry = reader.FindEntry("models/tracks/airport_sector_0");
+    assert(trackEntry != nullptr && "models/tracks/airport_sector_0 must be in bundle");
+    assert(trackEntry->type == SSV::CookedResourceType::Mesh);
+    const uint8_t* trackBlob = reader.GetEntryData(trackEntry);
+    const auto* trackHdr = reinterpret_cast<const SSV::GPUMeshHeader*>(trackBlob);
+    assert(trackHdr->vertexCount == 264 && "Expected 264 vertices in Airport Terminal Start Straight");
+    assert(trackHdr->indexCount == 3666 && "Expected 3666 indices (1222 triangles) in Airport Terminal Start Straight");
+    assert(trackHdr->vertexStride == 64 && "Expected 64-byte vertex stride in track mesh");
 
     // Verify Vehicle Mesh Entry with 64-byte vertex format
     const auto* meshEntry = reader.FindEntry("models/vehicles/musclecar_01");

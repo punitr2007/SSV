@@ -196,6 +196,17 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    if (renderer.HasTrackMesh()) {
+        vehicleSim.SetRoadCollision(renderer.GetRoadTriangles());
+        vehicleSim.Reset(renderer.GetTrackSpawnPoint());
+        cameraRig.Reset(vehicleSim.GetPosition(), vehicleSim.GetOrientation());
+        std::cout << "[Desktop Harness] Vehicle spawned on 3D Airport Track Sector at ("
+                  << renderer.GetTrackSpawnPoint().x << ", "
+                  << renderer.GetTrackSpawnPoint().y << ", "
+                  << renderer.GetTrackSpawnPoint().z << ") with "
+                  << renderer.GetRoadTriangles().size() << " collision triangles.\n";
+    }
+
     // 7. Main Loop with Fixed 60 Hz Timestep
     constexpr double FIXED_TIMESTEP = 1.0 / 60.0;
     auto lastTime = std::chrono::high_resolution_clock::now();
@@ -212,10 +223,11 @@ int main(int argc, char** argv) {
         }
 
         if (g_ResetRequested) {
-            vehicleSim.Reset({0.0f, 0.40f, 0.0f});
+            SSV::Vector3 spawn = renderer.HasTrackMesh() ? renderer.GetTrackSpawnPoint() : SSV::Vector3{0.0f, 0.40f, 0.0f};
+            vehicleSim.Reset(spawn);
             cameraRig.Reset(vehicleSim.GetPosition(), vehicleSim.GetOrientation());
             g_ResetRequested = false;
-            std::cout << "[Desktop Harness] Vehicle position reset to origin.\n";
+            std::cout << "[Desktop Harness] Vehicle position reset.\n";
         }
 
         auto currentTime = std::chrono::high_resolution_clock::now();

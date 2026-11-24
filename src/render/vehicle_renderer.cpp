@@ -85,6 +85,10 @@ void VehicleRenderer::Shutdown() {
     if (m_wheelVbo) { glDeleteBuffers(1, &m_wheelVbo); m_wheelVbo = 0; }
     if (m_wheelEbo) { glDeleteBuffers(1, &m_wheelEbo); m_wheelEbo = 0; }
 
+    if (m_trackVao) { glDeleteVertexArrays(1, &m_trackVao); m_trackVao = 0; }
+    if (m_trackVbo) { glDeleteBuffers(1, &m_trackVbo); m_trackVbo = 0; }
+    if (m_trackEbo) { glDeleteBuffers(1, &m_trackEbo); m_trackEbo = 0; }
+
     if (m_program) { glDeleteProgram(m_program); m_program = 0; }
 
     m_initialized = false;
@@ -410,6 +414,85 @@ bool VehicleRenderer::LoadCookedAssets() {
     LOGI("[VehicleRenderer] Successfully bound Cooked Vehicle Mesh (%u vertices, %u indices, %u stride).\n",
          meshHdr->vertexCount, meshHdr->indexCount, meshHdr->vertexStride);
 
+    // 3B. Load Track Sector Mesh (Airport Terminal Road Segment)
+    const CookedResourceEntry* trackEntry = reader.FindEntry("models/tracks/airport_sector_0");
+    if (trackEntry) {
+        const uint8_t* trackBlob = reader.GetEntryData(trackEntry);
+        const auto* trackHdr = reinterpret_cast<const GPUMeshHeader*>(trackBlob);
+        const uint8_t* vboData = trackBlob + trackHdr->vboOffset;
+        const uint8_t* eboData = trackBlob + trackHdr->eboOffset;
+
+        glGenVertexArrays(1, &m_trackVao);
+        glBindVertexArray(m_trackVao);
+
+        glGenBuffers(1, &m_trackVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, m_trackVbo);
+        glBufferData(GL_ARRAY_BUFFER, trackHdr->vboSize, vboData, GL_STATIC_DRAW);
+
+        glGenBuffers(1, &m_trackEbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_trackEbo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, trackHdr->eboSize, eboData, GL_STATIC_DRAW);
+
+        // Stride 64: Pos(0), Norm(12), Color(24), UV(40), Deform(48)
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, trackHdr->vertexStride, (void*)0);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, trackHdr->vertexStride, (void*)12);
+
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, trackHdr->vertexStride, (void*)24);
+
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, trackHdr->vertexStride, (void*)40);
+
+        glBindVertexArray(0);
+
+        m_trackIndexCount = trackHdr->indexCount;
+        m_trackIndexType = (trackHdr->indexFormat == 1) ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+        m_hasTrackMesh = true;
+
+        // Build RoadTriangles for physics raycast
+        m_roadTriangles.clear();
+        const auto* indices16 = reinterpret_cast<const uint16_t*>(eboData);
+        size_t numTris = trackHdr->indexCount / 3;
+        m_roadTriangles.reserve(numTris);
+
+        for (size_t ti = 0; ti < numTris; ++ti) {
+            uint16_t i0 = indices16[ti * 3 + 0];
+            uint16_t i1 = indices16[ti * 3 + 1];
+            uint16_t i2 = indices16[ti * 3 + 2];
+
+            if (i0 < trackHdr->vertexCount && i1 < trackHdr->vertexCount && i2 < trackHdr->vertexCount) {
+                const float* p0 = reinterpret_cast<const float*>(vboData + i0 * trackHdr->vertexStride);
+                const float* p1 = reinterpret_cast<const float*>(vboData + i1 * trackHdr->vertexStride);
+                const float* p2 = reinterpret_cast<const float*>(vboData + i2 * trackHdr->vertexStride);
+
+                Vector3 v0{p0[0], p0[1], p0[2]};
+                Vector3 v1{p1[0], p1[1], p1[2]};
+                Vector3 v2{p2[0], p2[1], p2[2]};
+
+                Vector3 edge1 = v1 - v0;
+                Vector3 edge2 = v2 - v0;
+                Vector3 fn = edge1.Cross(edge2).Normalized();
+
+                Physics::RoadTriangle rt;
+                rt.v0 = v0; rt.v1 = v1; rt.v2 = v2;
+                rt.normal = fn;
+                rt.minX = std::min({v0.x, v1.x, v2.x});
+                rt.maxX = std::max({v0.x, v1.x, v2.x});
+                rt.minY = std::min({v0.y, v1.y, v2.y});
+                rt.maxY = std::max({v0.y, v1.y, v2.y});
+                rt.minZ = std::min({v0.z, v1.z, v2.z});
+                rt.maxZ = std::max({v0.z, v1.z, v2.z});
+                m_roadTriangles.push_back(rt);
+            }
+        }
+
+        LOGI("[VehicleRenderer] Successfully bound Cooked Track Sector (%u vertices, %u indices, %zu collision triangles).\n",
+             trackHdr->vertexCount, trackHdr->indexCount, m_roadTriangles.size());
+    }
+
     // 4. Helper to upload texture from cooked bundle
     auto uploadTex = [&](const char* resName) -> GLuint {
         const CookedResourceEntry* entry = reader.FindEntry(resName);
@@ -720,13 +803,21 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     glUniform3f(m_uEyePos, camPos.x, camPos.y, camPos.z);
 
     // =========================================================================
-    // PASS 1: Render Ground Arena Plane (Opaque)
+    // PASS 1: Render Ground Arena Plane & Track Sector (Opaque)
     // =========================================================================
     Matrix4x4 groundModel = Matrix4x4::Identity();
     glUniformMatrix4fv(m_uModel, 1, GL_FALSE, &groundModel.m[0][0]);
-    glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
     glUniform1i(m_uUseTexture, 0);
 
+    // 1A. Render real 3D Airport Track Sector
+    if (m_hasTrackMesh && m_trackVao != 0) {
+        glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
+        glBindVertexArray(m_trackVao);
+        glDrawElements(GL_TRIANGLES, m_trackIndexCount, m_trackIndexType, nullptr);
+    }
+
+    // 1B. Render flat arena ground plane underneath
+    glUniform4f(m_uTint, 0.75f, 0.75f, 0.75f, 1.0f);
     glBindVertexArray(m_groundVao);
     glDrawElements(GL_TRIANGLES, m_groundIndexCount, GL_UNSIGNED_INT, nullptr);
 

@@ -50,6 +50,36 @@ VehicleSimulation::VehicleSimulation(const VehicleConfig& config)
     Reset();
 }
 
+void VehicleSimulation::SetRoadCollision(const std::vector<RoadTriangle>& triangles) {
+    m_roadTriangles = triangles;
+    for (auto& tri : m_roadTriangles) {
+        tri.minX = std::min({tri.v0.x, tri.v1.x, tri.v2.x});
+        tri.maxX = std::max({tri.v0.x, tri.v1.x, tri.v2.x});
+        tri.minY = std::min({tri.v0.y, tri.v1.y, tri.v2.y});
+        tri.maxY = std::max({tri.v0.y, tri.v1.y, tri.v2.y});
+        tri.minZ = std::min({tri.v0.z, tri.v1.z, tri.v2.z});
+        tri.maxZ = std::max({tri.v0.z, tri.v1.z, tri.v2.z});
+
+        Vector3 edge1 = tri.v1 - tri.v0;
+        Vector3 edge2 = tri.v2 - tri.v0;
+        Vector3 cross = edge1.Cross(edge2);
+        float len = cross.Length();
+        if (len > 1e-6f) {
+            Vector3 n = cross * (1.0f / len);
+            if (n.y < 0.0f) {
+                n = n * -1.0f; // Ensure road surface normal points upward
+            }
+            tri.normal = n;
+        } else if (tri.normal.Dot(tri.normal) < 1e-4f) {
+            tri.normal = {0.0f, 1.0f, 0.0f};
+        }
+    }
+}
+
+void VehicleSimulation::ClearRoadCollision() {
+    m_roadTriangles.clear();
+}
+
 void VehicleSimulation::Reset(const Vector3& spawnPosition) {
     m_position = spawnPosition;
     m_velocity = Vector3{0.0f, 0.0f, 0.0f};
@@ -190,16 +220,55 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
         // World position of suspension hardpoint
         Vector3 hardPointWorld = m_position + m_orientation.Rotate(w.hardPoint);
 
-        // Raycast down against flat ground plane (y = 0)
-        // Ray: P(t) = hardPointWorld + rayDown * t
-        // P(t).y = 0  =>  hardPointWorld.y + rayDown.y * t = 0  =>  t = -hardPointWorld.y / rayDown.y
-        float t = 0.0f;
+        // Raycast down against road collision mesh with fallback to y = 0
+        float t = maxRayLength + 1.0f;
         bool hitGround = false;
+        Vector3 hitNormal{0.0f, 1.0f, 0.0f};
 
-        if (std::abs(rayDown.y) > 1e-4f) {
-            t = -hardPointWorld.y / rayDown.y;
-            if (t > 0.0f && t <= maxRayLength) {
+        if (!m_roadTriangles.empty()) {
+            const Vector3& orig = hardPointWorld;
+            const Vector3& dir = rayDown;
+
+            for (const auto& tri : m_roadTriangles) {
+                // AABB early rejection
+                if (orig.x < tri.minX - 1.0f && dir.x <= 0.0f) continue;
+                if (orig.x > tri.maxX + 1.0f && dir.x >= 0.0f) continue;
+                if (orig.z < tri.minZ - 1.0f && dir.z <= 0.0f) continue;
+                if (orig.z > tri.maxZ + 1.0f && dir.z >= 0.0f) continue;
+
+                // Möller–Trumbore ray-triangle intersection
+                Vector3 edge1 = tri.v1 - tri.v0;
+                Vector3 edge2 = tri.v2 - tri.v0;
+                Vector3 pvec = dir.Cross(edge2);
+                float det = edge1.Dot(pvec);
+
+                if (std::abs(det) < 1e-7f) continue;
+                float invDet = 1.0f / det;
+
+                Vector3 tvec = orig - tri.v0;
+                float u = tvec.Dot(pvec) * invDet;
+                if (u < 0.0f || u > 1.0f) continue;
+
+                Vector3 qvec = tvec.Cross(edge1);
+                float v = dir.Dot(qvec) * invDet;
+                if (v < 0.0f || u + v > 1.0f) continue;
+
+                float hitT = edge2.Dot(qvec) * invDet;
+                if (hitT > 0.0f && hitT <= maxRayLength && hitT < t) {
+                    t = hitT;
+                    hitGround = true;
+                    hitNormal = tri.normal;
+                }
+            }
+        }
+
+        // Fallback to flat ground plane y = 0
+        if (!hitGround && std::abs(rayDown.y) > 1e-4f) {
+            float planeT = -hardPointWorld.y / rayDown.y;
+            if (planeT > 0.0f && planeT <= maxRayLength) {
+                t = planeT;
                 hitGround = true;
+                hitNormal = {0.0f, 1.0f, 0.0f};
             }
         }
 
@@ -208,10 +277,15 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
         Vector3 pointVel = m_velocity + m_angularVelocity.Cross(r);
 
         if (hitGround) {
+            // Guarantee contact normal opposes rayDown (pushes upward against chassis)
+            if (hitNormal.Dot(rayDown) > 0.0f) {
+                hitNormal = hitNormal * -1.0f;
+            }
+
             w.inContact = true;
             wheelsOnGround++;
             w.contactPoint = hardPointWorld + rayDown * t;
-            w.contactNormal = {0.0f, 1.0f, 0.0f};
+            w.contactNormal = hitNormal;
 
             // Suspension spring compression
             w.suspensionLength = std::clamp(t - m_config.wheelRadius, 0.05f, m_config.suspensionRestLength);
@@ -225,7 +299,7 @@ void VehicleSimulation::SimulateSuspensionAndTires(const InputState& input, floa
             if (springForceMagnitude < 0.0f) springForceMagnitude = 0.0f;
             w.normalForce = springForceMagnitude;
 
-            Vector3 springForce = up * springForceMagnitude;
+            Vector3 springForce = hitNormal * springForceMagnitude;
             totalForce += springForce;
             totalTorque += r.Cross(springForce);
 
