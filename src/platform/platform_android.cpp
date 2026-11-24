@@ -291,12 +291,7 @@ public:
 };
 
 PlatformContext CreatePlatform(bool headless) {
-    if (headless) {
-        // Return null platform
-        extern PlatformContext CreateNullPlatform();
-        return CreateNullPlatform();
-    }
-
+    (void)headless;
     PlatformContext ctx;
     ctx.time = std::make_unique<AndroidTimeProvider>();
     ctx.fileSystem = std::make_unique<AndroidFileSystem>();

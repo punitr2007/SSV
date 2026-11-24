@@ -5,6 +5,7 @@ plugins {
 android {
     namespace 'com.disney.splitsecond'
     compileSdk 34
+    ndkVersion '25.2.9519653'
 
     defaultConfig {
         applicationId "com.disney.splitsecond"
@@ -44,6 +45,10 @@ android {
         main {
             assets.srcDirs = ['src/main/assets']
         }
+    }
+
+    androidResources {
+        noCompress += ["bin", "pak"]
     }
 
     compileOptions {

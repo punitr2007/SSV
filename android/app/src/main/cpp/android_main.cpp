@@ -2,6 +2,7 @@
 #include <android_native_app_glue.h>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
+#include <cstring>
 
 #include "game_engine.h"
 #include "platform_abstraction.h"
@@ -59,7 +60,7 @@ static int InitDisplay(struct EngineContext* engine) {
         return -1;
     }
 
-    EGLint w, h;
+    EGLint w = 0, h = 0;
     eglQuerySurface(display, surface, EGL_WIDTH, &w);
     eglQuerySurface(display, surface, EGL_HEIGHT, &h);
 
@@ -101,7 +102,9 @@ static int32_t HandleInput(struct android_app* app, AInputEvent* event) {
         for (size_t i = 0; i < pointerCount; ++i) {
             float x = AMotionEvent_getX(event, i) / (float)engine->width;
             float y = AMotionEvent_getY(event, i) / (float)engine->height;
-            // Process touch event through Platform
+            (void)action;
+            (void)x;
+            (void)y;
         }
         return 1;
     }
@@ -148,16 +151,15 @@ void android_main(struct android_app* state) {
     SSV::Platform::SetAndroidAssetManager(state->activity->assetManager, internalPath);
 
     // Boot Game Engine
-    SSV::GameEngine& gameEngine = SSV::GameEngine::Instance();
-    SSV::EngineConfig config;
-    config.headless = false;
-    config.windowWidth = 1920;
-    config.windowHeight = 1080;
-    config.targetFps = 60.0f;
-    config.fixedTimeStep = 1.0f / 60.0f;
+    SSV::Core::GameEngine gameEngine;
+    SSV::Platform::WindowDesc windowDesc;
+    windowDesc.title = "Split/Second";
+    windowDesc.width = 1920;
+    windowDesc.height = 1080;
+    windowDesc.fullscreen = true;
 
     LOGI("Booting SSV Game Engine...");
-    gameEngine.Initialize(config);
+    gameEngine.Initialize(windowDesc, false);
 
     // Main Android Event & Render Loop
     while (true) {
@@ -173,7 +175,7 @@ void android_main(struct android_app* state) {
             if (state->destroyRequested != 0) {
                 LOGI("Destroy requested by Android OS.");
                 TerminateDisplay(&engine);
-                gameEngine.Shutdown();
+                gameEngine.Stop();
                 return;
             }
         }
@@ -181,7 +183,7 @@ void android_main(struct android_app* state) {
         // Render frame if surface is active
         if (engine.animating && engine.display != EGL_NO_DISPLAY) {
             // Update simulation tick
-            gameEngine.Run();
+            gameEngine.StepFrame(1.0f / 60.0f);
 
             // Clear frame buffer
             glClearColor(0.08f, 0.08f, 0.12f, 1.0f);

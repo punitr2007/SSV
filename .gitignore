@@ -15,6 +15,7 @@ bin/
 out/
 target/
 .gradle/
+.cxx/
 local.properties
 
 # Android build outputs

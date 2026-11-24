@@ -4,7 +4,7 @@ project(SplitSecondVelocityNative LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(SSV_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../")
+get_filename_component(SSV_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
 
 include_directories(
     "${SSV_ROOT}/include"
