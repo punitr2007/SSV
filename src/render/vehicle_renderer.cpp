@@ -6,6 +6,24 @@
 #include "vehicle_renderer.h"
 #include <cmath>
 #include <iostream>
+#include <fstream>
+#include <vector>
+
+#ifdef __ANDROID__
+#include <android/log.h>
+#include <android/asset_manager.h>
+#define LOG_TAG "SSV_Render"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+namespace SSV {
+namespace Platform {
+    extern AAssetManager* GetAndroidAssetManager();
+}
+}
+#else
+#define LOGI(...) printf(__VA_ARGS__)
+#define LOGE(...) fprintf(stderr, __VA_ARGS__)
+#endif
 
 namespace SSV {
 
@@ -17,12 +35,12 @@ VehicleRenderer::~VehicleRenderer() {
 
 bool VehicleRenderer::Initialize() {
     if (!InitGLPlatform()) {
-        std::cerr << "[VehicleRenderer] Failed to initialize GL platform.\n";
+        LOGE("[VehicleRenderer] Failed to initialize GL platform.\n");
         return false;
     }
 
     if (!CompileShaders()) {
-        std::cerr << "[VehicleRenderer] Failed to compile shaders.\n";
+        LOGE("[VehicleRenderer] Failed to compile shaders.\n");
         return false;
     }
 
@@ -36,7 +54,8 @@ bool VehicleRenderer::Initialize() {
     glCullFace(GL_BACK);
 
     m_initialized = true;
-    std::cout << "[VehicleRenderer] Successfully initialized vehicle & environment renderer.\n";
+    LOGI("[VehicleRenderer] Successfully initialized vehicle & environment renderer (Cooked Car Mesh: %s).\n",
+         m_hasCookedMesh ? "ACTIVE" : "FALLBACK");
     return true;
 }
 
@@ -50,6 +69,7 @@ void VehicleRenderer::Shutdown() {
     if (m_chassisVao) { glDeleteVertexArrays(1, &m_chassisVao); m_chassisVao = 0; }
     if (m_chassisVbo) { glDeleteBuffers(1, &m_chassisVbo); m_chassisVbo = 0; }
     if (m_chassisEbo) { glDeleteBuffers(1, &m_chassisEbo); m_chassisEbo = 0; }
+    if (m_chassisTexture) { glDeleteTextures(1, &m_chassisTexture); m_chassisTexture = 0; }
 
     if (m_wheelVao) { glDeleteVertexArrays(1, &m_wheelVao); m_wheelVao = 0; }
     if (m_wheelVbo) { glDeleteBuffers(1, &m_wheelVbo); m_wheelVbo = 0; }
@@ -68,16 +88,19 @@ bool VehicleRenderer::CompileShaders() {
         "layout(location = 0) in vec3 aPosition;\n"
         "layout(location = 1) in vec3 aNormal;\n"
         "layout(location = 2) in vec4 aColor;\n"
+        "layout(location = 3) in vec2 aTexCoord;\n"
         "uniform mat4 uViewProj;\n"
         "uniform mat4 uModel;\n"
         "out vec3 vNormal;\n"
         "out vec3 vWorldPos;\n"
         "out vec4 vColor;\n"
+        "out vec2 vTexCoord;\n"
         "void main() {\n"
         "    vec4 worldPos = uModel * vec4(aPosition, 1.0);\n"
         "    vWorldPos = worldPos.xyz;\n"
         "    vNormal = mat3(uModel) * aNormal;\n"
         "    vColor = aColor;\n"
+        "    vTexCoord = aTexCoord;\n"
         "    gl_Position = uViewProj * worldPos;\n"
         "}\n";
 
@@ -87,9 +110,12 @@ bool VehicleRenderer::CompileShaders() {
         "in vec3 vNormal;\n"
         "in vec3 vWorldPos;\n"
         "in vec4 vColor;\n"
+        "in vec2 vTexCoord;\n"
         "uniform vec3 uLightDir;\n"
         "uniform vec3 uEyePos;\n"
         "uniform vec4 uTint;\n"
+        "uniform sampler2D uTexture;\n"
+        "uniform int uUseTexture;\n"
         "out vec4 fragColor;\n"
         "void main() {\n"
         "    vec3 N = normalize(vNormal);\n"
@@ -99,8 +125,9 @@ bool VehicleRenderer::CompileShaders() {
         "    float diff = max(dot(N, L), 0.0);\n"
         "    float spec = pow(max(dot(N, H), 0.0), 24.0) * 0.40;\n"
         "    float ambient = 0.35;\n"
-        "    vec3 rgb = (vColor.rgb * uTint.rgb) * (ambient + diff * 0.65) + vec3(spec);\n"
-        "    fragColor = vec4(rgb, vColor.a * uTint.a);\n"
+        "    vec4 baseColor = (uUseTexture != 0) ? texture(uTexture, vTexCoord) : vColor;\n"
+        "    vec3 rgb = (baseColor.rgb * uTint.rgb) * (ambient + diff * 0.65) + vec3(spec);\n"
+        "    fragColor = vec4(rgb, baseColor.a * uTint.a);\n"
         "}\n";
 #else
     const char* vsSource =
@@ -108,16 +135,19 @@ bool VehicleRenderer::CompileShaders() {
         "layout(location = 0) in vec3 aPosition;\n"
         "layout(location = 1) in vec3 aNormal;\n"
         "layout(location = 2) in vec4 aColor;\n"
+        "layout(location = 3) in vec2 aTexCoord;\n"
         "uniform mat4 uViewProj;\n"
         "uniform mat4 uModel;\n"
         "out vec3 vNormal;\n"
         "out vec3 vWorldPos;\n"
         "out vec4 vColor;\n"
+        "out vec2 vTexCoord;\n"
         "void main() {\n"
         "    vec4 worldPos = uModel * vec4(aPosition, 1.0);\n"
         "    vWorldPos = worldPos.xyz;\n"
         "    vNormal = mat3(uModel) * aNormal;\n"
         "    vColor = aColor;\n"
+        "    vTexCoord = aTexCoord;\n"
         "    gl_Position = uViewProj * worldPos;\n"
         "}\n";
 
@@ -126,9 +156,12 @@ bool VehicleRenderer::CompileShaders() {
         "in vec3 vNormal;\n"
         "in vec3 vWorldPos;\n"
         "in vec4 vColor;\n"
+        "in vec2 vTexCoord;\n"
         "uniform vec3 uLightDir;\n"
         "uniform vec3 uEyePos;\n"
         "uniform vec4 uTint;\n"
+        "uniform sampler2D uTexture;\n"
+        "uniform int uUseTexture;\n"
         "out vec4 fragColor;\n"
         "void main() {\n"
         "    vec3 N = normalize(vNormal);\n"
@@ -138,8 +171,9 @@ bool VehicleRenderer::CompileShaders() {
         "    float diff = max(dot(N, L), 0.0);\n"
         "    float spec = pow(max(dot(N, H), 0.0), 24.0) * 0.40;\n"
         "    float ambient = 0.35;\n"
-        "    vec3 rgb = (vColor.rgb * uTint.rgb) * (ambient + diff * 0.65) + vec3(spec);\n"
-        "    fragColor = vec4(rgb, vColor.a * uTint.a);\n"
+        "    vec4 baseColor = (uUseTexture != 0) ? texture(uTexture, vTexCoord) : vColor;\n"
+        "    vec3 rgb = (baseColor.rgb * uTint.rgb) * (ambient + diff * 0.65) + vec3(spec);\n"
+        "    fragColor = vec4(rgb, baseColor.a * uTint.a);\n"
         "}\n";
 #endif
 
@@ -151,7 +185,7 @@ bool VehicleRenderer::CompileShaders() {
     if (!success) {
         char infoLog[512];
         glGetShaderInfoLog(vs, sizeof(infoLog), nullptr, infoLog);
-        std::cerr << "Vertex Shader Error: " << infoLog << "\n";
+        LOGE("Vertex Shader Error: %s\n", infoLog);
         return false;
     }
 
@@ -162,7 +196,7 @@ bool VehicleRenderer::CompileShaders() {
     if (!success) {
         char infoLog[512];
         glGetShaderInfoLog(fs, sizeof(infoLog), nullptr, infoLog);
-        std::cerr << "Fragment Shader Error: " << infoLog << "\n";
+        LOGE("Fragment Shader Error: %s\n", infoLog);
         return false;
     }
 
@@ -178,15 +212,17 @@ bool VehicleRenderer::CompileShaders() {
     if (!success) {
         char infoLog[512];
         glGetProgramInfoLog(m_program, sizeof(infoLog), nullptr, infoLog);
-        std::cerr << "Shader Program Link Error: " << infoLog << "\n";
+        LOGE("Shader Program Link Error: %s\n", infoLog);
         return false;
     }
 
-    m_uViewProj  = glGetUniformLocation(m_program, "uViewProj");
-    m_uModel     = glGetUniformLocation(m_program, "uModel");
-    m_uLightDir  = glGetUniformLocation(m_program, "uLightDir");
-    m_uEyePos    = glGetUniformLocation(m_program, "uEyePos");
-    m_uTint      = glGetUniformLocation(m_program, "uTint");
+    m_uViewProj   = glGetUniformLocation(m_program, "uViewProj");
+    m_uModel      = glGetUniformLocation(m_program, "uModel");
+    m_uLightDir   = glGetUniformLocation(m_program, "uLightDir");
+    m_uEyePos     = glGetUniformLocation(m_program, "uEyePos");
+    m_uTint       = glGetUniformLocation(m_program, "uTint");
+    m_uTexture    = glGetUniformLocation(m_program, "uTexture");
+    m_uUseTexture = glGetUniformLocation(m_program, "uUseTexture");
 
     return true;
 }
@@ -211,7 +247,6 @@ void VehicleRenderer::BuildGroundMesh() {
             float z1 = z0 + TILE_SIZE;
 
             Vector4 c = ((x + z) % 2 == 0) ? colorDark : colorLight;
-            // Center runway yellow line
             if (std::abs(x - GRID_SIZE / 2) <= 1 && (z % 4 <= 2)) {
                 c = colorStripe;
             }
@@ -219,10 +254,10 @@ void VehicleRenderer::BuildGroundMesh() {
             uint32_t baseIdx = (uint32_t)vertices.size();
             Vector3 n{0.0f, 1.0f, 0.0f};
 
-            vertices.push_back({{x0, 0.0f, z0}, n, c});
-            vertices.push_back({{x1, 0.0f, z0}, n, c});
-            vertices.push_back({{x1, 0.0f, z1}, n, c});
-            vertices.push_back({{x0, 0.0f, z1}, n, c});
+            vertices.push_back({{x0, 0.0f, z0}, n, c, 0.0f, 0.0f});
+            vertices.push_back({{x1, 0.0f, z0}, n, c, 1.0f, 0.0f});
+            vertices.push_back({{x1, 0.0f, z1}, n, c, 1.0f, 1.0f});
+            vertices.push_back({{x0, 0.0f, z1}, n, c, 0.0f, 1.0f});
 
             indices.push_back(baseIdx + 0);
             indices.push_back(baseIdx + 2);
@@ -246,19 +281,144 @@ void VehicleRenderer::BuildGroundMesh() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_groundEbo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(), GL_STATIC_DRAW);
 
-    // Attribute 0: Position
+    // Stride 48: Position (0), Normal (12), Color (24), UV (40)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
 
-    // Attribute 1: Normal
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
 
-    // Attribute 2: Color
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
 
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+
     glBindVertexArray(0);
+}
+
+bool VehicleRenderer::LoadCookedAssets() {
+    std::vector<uint8_t> bundleData;
+
+    // 1. Check local file candidates
+    const char* candidates[] = {
+        "assets/main_game.bin",
+        "main_game.bin",
+        "../assets/main_game.bin",
+        "android/app/src/main/assets/main_game.bin",
+        "D:/Codes/Win_codes/SSV/assets/main_game.bin"
+    };
+
+    for (const char* path : candidates) {
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        if (file.is_open()) {
+            std::streamsize sz = file.tellg();
+            file.seekg(0, std::ios::beg);
+            bundleData.resize(static_cast<size_t>(sz));
+            if (file.read(reinterpret_cast<char*>(bundleData.data()), sz)) {
+                LOGI("[VehicleRenderer] Loaded main_game.bin from '%s' (%zu bytes)\n", path, bundleData.size());
+                break;
+            }
+        }
+    }
+
+#ifdef __ANDROID__
+    // 2. Fall back to APK assets on Android
+    if (bundleData.empty()) {
+        AAssetManager* mgr = Platform::GetAndroidAssetManager();
+        if (mgr) {
+            AAsset* asset = AAssetManager_open(mgr, "main_game.bin", AASSET_MODE_BUFFER);
+            if (asset) {
+                off_t sz = AAsset_getLength(asset);
+                bundleData.resize(static_cast<size_t>(sz));
+                AAsset_read(asset, bundleData.data(), sz);
+                AAsset_close(asset);
+                LOGI("[VehicleRenderer] Loaded main_game.bin from APK assets (%zu bytes)\n", bundleData.size());
+            }
+        }
+    }
+#endif
+
+    if (bundleData.empty()) {
+        LOGE("[VehicleRenderer] main_game.bin not found on disk or APK assets.\n");
+        return false;
+    }
+
+    CookedBundleReader reader;
+    if (!reader.Open(bundleData.data(), bundleData.size())) {
+        LOGE("[VehicleRenderer] Failed to parse main_game.bin header/TOC.\n");
+        return false;
+    }
+
+    // 3. Load Musclecar_01 Mesh
+    const CookedResourceEntry* meshEntry = reader.FindEntry("models/vehicles/musclecar_01");
+    if (!meshEntry) {
+        LOGE("[VehicleRenderer] Resource 'models/vehicles/musclecar_01' not found in cooked bundle.\n");
+        return false;
+    }
+
+    const uint8_t* meshBlob = reader.GetEntryData(meshEntry);
+    const auto* meshHdr = reinterpret_cast<const GPUMeshHeader*>(meshBlob);
+    const uint8_t* vboBytes = meshBlob + meshHdr->vboOffset;
+    const uint8_t* eboBytes = meshBlob + meshHdr->eboOffset;
+
+    glGenVertexArrays(1, &m_chassisVao);
+    glBindVertexArray(m_chassisVao);
+
+    glGenBuffers(1, &m_chassisVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, m_chassisVbo);
+    glBufferData(GL_ARRAY_BUFFER, meshHdr->vboSize, vboBytes, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &m_chassisEbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_chassisEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, meshHdr->eboSize, eboBytes, GL_STATIC_DRAW);
+
+    // Stride 48: Position (0), Normal (12), Color (24), UV (40)
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, meshHdr->vertexStride, (void*)0);
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, meshHdr->vertexStride, (void*)12);
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, meshHdr->vertexStride, (void*)24);
+
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, meshHdr->vertexStride, (void*)40);
+
+    glBindVertexArray(0);
+
+    m_chassisIndexCount = meshHdr->indexCount;
+    m_chassisIndexType = (meshHdr->indexFormat == 1) ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+    m_hasCookedMesh = true;
+
+    LOGI("[VehicleRenderer] Successfully bound Cooked Vehicle Mesh (%u vertices, %u indices).\n",
+         meshHdr->vertexCount, meshHdr->indexCount);
+
+    // 4. Load Vehicle Body Diffuse Texture
+    const CookedResourceEntry* texEntry = reader.FindEntry("textures/vehicles/musclecar_01_diffuse");
+    if (texEntry) {
+        const uint8_t* texBlob = reader.GetEntryData(texEntry);
+        const auto* texHdr = reinterpret_cast<const GPUTextureHeader*>(texBlob);
+        const uint8_t* pixelData = texBlob + sizeof(GPUTextureHeader);
+
+        glGenTextures(1, &m_chassisTexture);
+        glBindTexture(GL_TEXTURE_2D, m_chassisTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, texHdr->glInternalFormat,
+                     texHdr->width, texHdr->height, 0,
+                     texHdr->glFormat, texHdr->glType, pixelData);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        LOGI("[VehicleRenderer] Uploaded Cooked Diffuse Texture (%ux%u RGBA).\n",
+             texHdr->width, texHdr->height);
+    }
+
+    return true;
 }
 
 static void AddBox(std::vector<Vertex>& verts, std::vector<uint32_t>& inds,
@@ -308,7 +468,7 @@ static void AddBox(std::vector<Vertex>& verts, std::vector<uint32_t>& inds,
     for (int i = 0; i < 6; ++i) {
         uint32_t baseIdx = (uint32_t)verts.size();
         for (int j = 0; j < 4; ++j) {
-            verts.push_back({faces[i].p[j], faces[i].n, color});
+            verts.push_back({faces[i].p[j], faces[i].n, color, 0.0f, 0.0f});
         }
         inds.push_back(baseIdx + 0);
         inds.push_back(baseIdx + 2);
@@ -319,45 +479,30 @@ static void AddBox(std::vector<Vertex>& verts, std::vector<uint32_t>& inds,
     }
 }
 
-void VehicleRenderer::BuildChassisMesh() {
+void VehicleRenderer::BuildProceduralChassisMesh() {
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
-    // Split/Second Signature Car Body Palette:
-    Vector4 carBodyBlue   = {0.05f, 0.35f, 0.88f, 1.0f}; // Velocity electric blue
-    Vector4 carTrimBlack  = {0.12f, 0.12f, 0.14f, 1.0f}; // Matte carbon trim
-    Vector4 carCockpit    = {0.18f, 0.22f, 0.28f, 1.0f}; // Tinted cockpit glass
-    Vector4 headlightCyan = {0.80f, 0.95f, 1.00f, 1.0f}; // Xenon headlights
-    Vector4 taillightRed  = {0.95f, 0.08f, 0.08f, 1.0f}; // LED red taillights
+    Vector4 carBodyBlue   = {0.05f, 0.35f, 0.88f, 1.0f};
+    Vector4 carTrimBlack  = {0.12f, 0.12f, 0.14f, 1.0f};
+    Vector4 carCockpit    = {0.18f, 0.22f, 0.28f, 1.0f};
+    Vector4 headlightCyan = {0.80f, 0.95f, 1.00f, 1.0f};
+    Vector4 taillightRed  = {0.95f, 0.08f, 0.08f, 1.0f};
 
-    // 1. Lower Main Chassis
     AddBox(vertices, indices, {0.0f, 0.35f, 0.0f}, {1.85f, 0.38f, 4.20f}, carBodyBlue);
-
-    // 2. Cabin / Cockpit Roof
     AddBox(vertices, indices, {0.0f, 0.72f, -0.30f}, {1.35f, 0.42f, 2.10f}, carCockpit);
-
-    // 3. Front Hood / Wedge
     AddBox(vertices, indices, {0.0f, 0.38f, 1.40f}, {1.70f, 0.26f, 1.40f}, carBodyBlue);
-
-    // 4. Front Splitter / Bumper
     AddBox(vertices, indices, {0.0f, 0.16f, 2.05f}, {1.88f, 0.10f, 0.35f}, carTrimBlack);
-
-    // 5. Rear Diffuser
     AddBox(vertices, indices, {0.0f, 0.20f, -2.05f}, {1.82f, 0.14f, 0.30f}, carTrimBlack);
-
-    // 6. Rear Wing / Spoiler
-    AddBox(vertices, indices, {-0.60f, 0.75f, -1.90f}, {0.08f, 0.45f, 0.15f}, carTrimBlack); // Left strut
-    AddBox(vertices, indices, { 0.60f, 0.75f, -1.90f}, {0.08f, 0.45f, 0.15f}, carTrimBlack); // Right strut
-    AddBox(vertices, indices, { 0.00f, 0.98f, -1.95f}, {1.75f, 0.06f, 0.45f}, carBodyBlue);  // Wing blade
-
-    // 7. Headlights (Twin Xenon front lenses)
+    AddBox(vertices, indices, {-0.60f, 0.75f, -1.90f}, {0.08f, 0.45f, 0.15f}, carTrimBlack);
+    AddBox(vertices, indices, { 0.60f, 0.75f, -1.90f}, {0.08f, 0.45f, 0.15f}, carTrimBlack);
+    AddBox(vertices, indices, { 0.00f, 0.98f, -1.95f}, {1.75f, 0.06f, 0.45f}, carBodyBlue);
     AddBox(vertices, indices, {-0.65f, 0.40f, 2.08f}, {0.35f, 0.12f, 0.06f}, headlightCyan);
     AddBox(vertices, indices, { 0.65f, 0.40f, 2.08f}, {0.35f, 0.12f, 0.06f}, headlightCyan);
-
-    // 8. Taillights (Full-width LED rear strip)
     AddBox(vertices, indices, {0.0f, 0.45f, -2.08f}, {1.65f, 0.10f, 0.06f}, taillightRed);
 
     m_chassisIndexCount = (uint32_t)indices.size();
+    m_chassisIndexType = GL_UNSIGNED_INT;
 
     glGenVertexArrays(1, &m_chassisVao);
     glBindVertexArray(m_chassisVao);
@@ -379,7 +524,18 @@ void VehicleRenderer::BuildChassisMesh() {
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
 
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+
     glBindVertexArray(0);
+}
+
+void VehicleRenderer::BuildChassisMesh() {
+    if (LoadCookedAssets()) {
+        return;
+    }
+    LOGI("[VehicleRenderer] Falling back to procedural sports car chassis mesh.\n");
+    BuildProceduralChassisMesh();
 }
 
 void VehicleRenderer::BuildWheelMesh() {
@@ -394,7 +550,6 @@ void VehicleRenderer::BuildWheelMesh() {
     Vector4 tireColor = {0.10f, 0.10f, 0.11f, 1.0f};  // Rubber tire
     Vector4 rimColor  = {0.70f, 0.72f, 0.75f, 1.0f};  // Alloy silver rim
 
-    // Generate cylinder centered at origin aligned along X axis (wheel width is along X)
     // Tread strip
     for (int i = 0; i < SEGMENTS; ++i) {
         float theta0 = (2.0f * Math::PI * i) / SEGMENTS;
@@ -410,10 +565,10 @@ void VehicleRenderer::BuildWheelMesh() {
 
         uint32_t base = (uint32_t)vertices.size();
 
-        vertices.push_back({{-HALF_W, y0, z0}, n0, tireColor});
-        vertices.push_back({{ HALF_W, y0, z0}, n0, tireColor});
-        vertices.push_back({{ HALF_W, y1, z1}, n1, tireColor});
-        vertices.push_back({{-HALF_W, y1, z1}, n1, tireColor});
+        vertices.push_back({{-HALF_W, y0, z0}, n0, tireColor, 0.0f, 0.0f});
+        vertices.push_back({{ HALF_W, y0, z0}, n0, tireColor, 1.0f, 0.0f});
+        vertices.push_back({{ HALF_W, y1, z1}, n1, tireColor, 1.0f, 1.0f});
+        vertices.push_back({{-HALF_W, y1, z1}, n1, tireColor, 0.0f, 1.0f});
 
         indices.push_back(base + 0);
         indices.push_back(base + 2);
@@ -425,12 +580,12 @@ void VehicleRenderer::BuildWheelMesh() {
 
     // Outer Rim Cap (+X)
     uint32_t centerOuter = (uint32_t)vertices.size();
-    vertices.push_back({{HALF_W, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, rimColor});
+    vertices.push_back({{HALF_W, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, rimColor, 0.5f, 0.5f});
     for (int i = 0; i <= SEGMENTS; ++i) {
         float theta = (2.0f * Math::PI * i) / SEGMENTS;
         float y = std::sin(theta) * (RADIUS * 0.75f);
         float z = std::cos(theta) * (RADIUS * 0.75f);
-        vertices.push_back({{HALF_W, y, z}, {1.0f, 0.0f, 0.0f}, rimColor});
+        vertices.push_back({{HALF_W, y, z}, {1.0f, 0.0f, 0.0f}, rimColor, 0.5f + y, 0.5f + z});
         if (i > 0) {
             indices.push_back(centerOuter);
             indices.push_back(centerOuter + i + 1);
@@ -440,12 +595,12 @@ void VehicleRenderer::BuildWheelMesh() {
 
     // Inner Rim Cap (-X)
     uint32_t centerInner = (uint32_t)vertices.size();
-    vertices.push_back({{-HALF_W, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}, rimColor});
+    vertices.push_back({{-HALF_W, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}, rimColor, 0.5f, 0.5f});
     for (int i = 0; i <= SEGMENTS; ++i) {
         float theta = (2.0f * Math::PI * i) / SEGMENTS;
         float y = std::sin(theta) * (RADIUS * 0.75f);
         float z = std::cos(theta) * (RADIUS * 0.75f);
-        vertices.push_back({{-HALF_W, y, z}, {-1.0f, 0.0f, 0.0f}, rimColor});
+        vertices.push_back({{-HALF_W, y, z}, {-1.0f, 0.0f, 0.0f}, rimColor, 0.5f + y, 0.5f + z});
         if (i > 0) {
             indices.push_back(centerInner);
             indices.push_back(centerInner + i);
@@ -475,6 +630,9 @@ void VehicleRenderer::BuildWheelMesh() {
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
 
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+
     glBindVertexArray(0);
 }
 
@@ -488,8 +646,6 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     Matrix4x4 viewProj = view * proj;
 
     glUniformMatrix4fv(m_uViewProj, 1, GL_FALSE, &viewProj.m[0][0]);
-
-    // Directional sun light
     glUniform3f(m_uLightDir, 0.45f, 0.85f, 0.28f);
 
     Vector3 camPos = camera.GetPosition();
@@ -499,25 +655,35 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     Matrix4x4 groundModel = Matrix4x4::Identity();
     glUniformMatrix4fv(m_uModel, 1, GL_FALSE, &groundModel.m[0][0]);
     glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
+    glUniform1i(m_uUseTexture, 0);
 
     glBindVertexArray(m_groundVao);
     glDrawElements(GL_TRIANGLES, m_groundIndexCount, GL_UNSIGNED_INT, nullptr);
 
-    // 2. Render Vehicle Chassis
+    // 2. Render Vehicle Chassis (Original Extracted Split/Second Car)
     Matrix4x4 chassisModel = vehicle.GetTransform();
     glUniformMatrix4fv(m_uModel, 1, GL_FALSE, &chassisModel.m[0][0]);
 
-    // If braking, tint taillights glowing red
     if (isBraking) {
         glUniform4f(m_uTint, 1.15f, 0.95f, 0.95f, 1.0f);
     } else {
         glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
     }
 
-    glBindVertexArray(m_chassisVao);
-    glDrawElements(GL_TRIANGLES, m_chassisIndexCount, GL_UNSIGNED_INT, nullptr);
+    if (m_chassisTexture != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_chassisTexture);
+        glUniform1i(m_uTexture, 0);
+        glUniform1i(m_uUseTexture, 1);
+    } else {
+        glUniform1i(m_uUseTexture, 0);
+    }
 
-    // 3. Render 4 Wheels with their individual dynamic transforms
+    glBindVertexArray(m_chassisVao);
+    glDrawElements(GL_TRIANGLES, m_chassisIndexCount, m_chassisIndexType, nullptr);
+
+    // 3. Render 4 Wheels
+    glUniform1i(m_uUseTexture, 0);
     glBindVertexArray(m_wheelVao);
     glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
 

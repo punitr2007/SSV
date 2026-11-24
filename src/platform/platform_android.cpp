@@ -29,6 +29,10 @@ void SetAndroidAssetManager(AAssetManager* mgr, const char* internalPath) {
     LOGI("Android AssetManager set. Storage path: %s", g_InternalStoragePath.c_str());
 }
 
+AAssetManager* GetAndroidAssetManager() {
+    return g_AssetManager;
+}
+
 // ============================================================================
 // Android Time Provider
 // ============================================================================
@@ -67,7 +71,18 @@ public:
     }
 
     virtual bool FileExists(const std::string& path) const override {
-        // First check APK assets
+        // 1. Check external storage (/sdcard/SSV/ and app-specific external files)
+        const std::string externalCandidates[] = {
+            "/sdcard/SSV/" + path,
+            "/sdcard/Android/data/com.disney.splitsecond/files/" + path,
+            g_InternalStoragePath + "/" + path
+        };
+        for (const auto& p : externalCandidates) {
+            std::ifstream f(p);
+            if (f.good()) return true;
+        }
+
+        // 2. Check APK assets
         if (g_AssetManager) {
             AAsset* asset = AAssetManager_open(g_AssetManager, path.c_str(), AASSET_MODE_UNKNOWN);
             if (asset) {
@@ -75,16 +90,33 @@ public:
                 return true;
             }
         }
-        // Then check internal storage
-        std::string fullPath = g_InternalStoragePath + "/" + path;
-        std::ifstream f(fullPath);
-        return f.good();
+        return false;
     }
 
     virtual std::vector<uint8_t> ReadAllBytes(const std::string& path) const override {
         std::vector<uint8_t> buffer;
 
-        // Try opening from APK assets
+        // 1. Try reading from external storage (/sdcard/SSV/ first for fast streaming)
+        const std::string externalCandidates[] = {
+            "/sdcard/SSV/" + path,
+            "/sdcard/Android/data/com.disney.splitsecond/files/" + path,
+            g_InternalStoragePath + "/" + path
+        };
+
+        for (const auto& fullPath : externalCandidates) {
+            std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+            if (file.is_open()) {
+                std::streamsize size = file.tellg();
+                file.seekg(0, std::ios::beg);
+                buffer.resize(size);
+                if (file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+                    LOGI("Read %zu bytes from external storage: %s", buffer.size(), fullPath.c_str());
+                    return buffer;
+                }
+            }
+        }
+
+        // 2. Try opening from APK assets
         if (g_AssetManager) {
             AAsset* asset = AAssetManager_open(g_AssetManager, path.c_str(), AASSET_MODE_BUFFER);
             if (asset) {
@@ -97,20 +129,7 @@ public:
             }
         }
 
-        // Try reading from app storage
-        std::string fullPath = g_InternalStoragePath + "/" + path;
-        std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
-        if (file.is_open()) {
-            std::streamsize size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            buffer.resize(size);
-            if (file.read(reinterpret_cast<char*>(buffer.data()), size)) {
-                LOGI("Read %zu bytes from storage: %s", buffer.size(), fullPath.c_str());
-            }
-        } else {
-            LOGE("Failed to find file: %s (in assets or storage)", path.c_str());
-        }
-
+        LOGE("Failed to find file: %s (in /sdcard/SSV, storage, or APK assets)", path.c_str());
         return buffer;
     }
 

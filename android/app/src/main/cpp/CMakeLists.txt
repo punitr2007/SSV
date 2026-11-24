@@ -37,6 +37,15 @@ target_compile_definitions(ssv PRIVATE
     GL_GLEXT_PROTOTYPES
 )
 
+target_compile_options(ssv PRIVATE
+    -O3
+    -flto
+    -ffast-math
+    -funsafe-math-optimizations
+    -fomit-frame-pointer
+    -fvisibility=hidden
+)
+
 target_link_libraries(ssv PRIVATE
     android
     log

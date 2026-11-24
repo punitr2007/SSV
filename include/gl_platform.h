@@ -25,6 +25,8 @@
     #define GL_COMPILE_STATUS                 0x8B81
     #define GL_LINK_STATUS                    0x8B82
     #define GL_INFO_LOG_LENGTH                0x8B84
+    #define GL_CLAMP_TO_EDGE                  0x812F
+    #define GL_TEXTURE0                       0x84C0
 
     typedef ptrdiff_t GLsizeiptr;
     typedef ptrdiff_t GLintptr;
@@ -62,8 +64,10 @@
     typedef GLint (APIENTRY *PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar *name);
     typedef void (APIENTRY *PFNGLUNIFORMMATRIX4FVPROC)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
     typedef void (APIENTRY *PFNGLUNIFORM1FPROC)(GLint location, GLfloat v0);
+    typedef void (APIENTRY *PFNGLUNIFORM1IPROC)(GLint location, GLint v0);
     typedef void (APIENTRY *PFNGLUNIFORM3FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
     typedef void (APIENTRY *PFNGLUNIFORM4FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+    typedef void (APIENTRY *PFNGLACTIVETEXTUREPROC)(GLenum texture);
 
     extern PFNGLGENBUFFERSPROC glGenBuffers;
     extern PFNGLBINDBUFFERPROC glBindBuffer;
@@ -96,8 +100,10 @@
     extern PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
     extern PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
     extern PFNGLUNIFORM1FPROC glUniform1f;
+    extern PFNGLUNIFORM1IPROC glUniform1i;
     extern PFNGLUNIFORM3FPROC glUniform3f;
     extern PFNGLUNIFORM4FPROC glUniform4f;
+    extern PFNGLACTIVETEXTUREPROC glActiveTexture;
 
     inline bool InitGLPlatform() {
         #define LOAD_PROC(type, name) \
@@ -135,8 +141,10 @@
         LOAD_PROC(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
         LOAD_PROC(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
         LOAD_PROC(PFNGLUNIFORM1FPROC, glUniform1f);
+        LOAD_PROC(PFNGLUNIFORM1IPROC, glUniform1i);
         LOAD_PROC(PFNGLUNIFORM3FPROC, glUniform3f);
         LOAD_PROC(PFNGLUNIFORM4FPROC, glUniform4f);
+        LOAD_PROC(PFNGLACTIVETEXTUREPROC, glActiveTexture);
 
         #undef LOAD_PROC
         return true;

@@ -23,6 +23,7 @@ sources = [
     os.path.join(ssv_dir, "tests", "test_state_machine.cpp"),
     os.path.join(ssv_dir, "tests", "test_ark_parser.cpp"),
     os.path.join(ssv_dir, "tests", "test_vehicle_physics.cpp"),
+    os.path.join(ssv_dir, "tests", "test_cooked_bundle.cpp"),
     os.path.join(ssv_dir, "tests", "test_runner.cpp")
 ]
 
@@ -38,7 +39,7 @@ if res.returncode != 0:
     sys.exit(1)
 
 print("Compilation SUCCESSFUL! Running test_runner.exe...\n")
-run_res = subprocess.run([out_exe], capture_output=True, text=True)
+run_res = subprocess.run([out_exe], capture_output=True, text=True, cwd=ssv_dir)
 print(run_res.stdout)
 if run_res.stderr:
     print("Stderr:", run_res.stderr)

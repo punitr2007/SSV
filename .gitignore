@@ -9,6 +9,26 @@
 *.dylib
 *.bin
 
+# Game asset containers and extracted proprietary assets
+*.ssvpak
+*.ark
+*.model
+*.stream
+*.streamtex
+*.textures
+*.params
+*.dds
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.bik
+*.fev
+*.fsb
+assets/extracted/
+assets/*.bin
+android/app/src/main/assets/*.bin
+
 # Build directories
 build/
 bin/

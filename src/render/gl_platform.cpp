@@ -32,6 +32,8 @@ PFNGLDELETEPROGRAMPROC glDeleteProgram = nullptr;
 PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation = nullptr;
 PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv = nullptr;
 PFNGLUNIFORM1FPROC glUniform1f = nullptr;
+PFNGLUNIFORM1IPROC glUniform1i = nullptr;
 PFNGLUNIFORM3FPROC glUniform3f = nullptr;
 PFNGLUNIFORM4FPROC glUniform4f = nullptr;
+PFNGLACTIVETEXTUREPROC glActiveTexture = nullptr;
 #endif

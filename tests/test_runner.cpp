@@ -4,6 +4,7 @@ void RunAllMathTests();
 void RunAllStateTests();
 void RunAllArkTests();
 void RunAllVehiclePhysicsTests();
+void RunAllCookedBundleTests();
 
 int main() {
     std::cout << "============================================================" << std::endl;
@@ -15,6 +16,7 @@ int main() {
         RunAllStateTests();
         RunAllArkTests();
         RunAllVehiclePhysicsTests();
+        RunAllCookedBundleTests();
 
         std::cout << "\n============================================================" << std::endl;
         std::cout << "   ALL UNIT TESTS PASSED SUCCESSFULLY! (100% VERIFIED)      " << std::endl;

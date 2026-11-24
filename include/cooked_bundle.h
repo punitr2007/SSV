@@ -11,6 +11,8 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <string>
+#include <cctype>
 
 namespace SSV {
 
@@ -52,7 +54,7 @@ struct CookedResourceEntry {
 struct GPUMeshHeader {
     uint32_t vertexCount;
     uint32_t indexCount;
-    uint32_t vertexStride;    // Bytes per vertex (e.g. 32 = Pos[3f], Norm[3f], UV[2f])
+    uint32_t vertexStride;    // Bytes per vertex (e.g. 48 = Pos[3f], Norm[3f], Color[4f], UV[2f])
     uint32_t indexFormat;     // 0 = uint16_t, 1 = uint32_t
     uint32_t vboOffset;       // Relative to start of GPUMeshHeader
     uint32_t vboSize;
@@ -66,12 +68,72 @@ struct GPUTextureHeader {
     uint32_t height;
     uint32_t depth;
     uint32_t mipLevels;
-    uint32_t glInternalFormat;// GL_COMPRESSED_RGBA8_ETC2_EAC (0x9278) or GL_RGBA8 (0x8058)
+    uint32_t glInternalFormat;// GL_RGBA8 (0x8058) or GL_RGBA (0x1908)
     uint32_t glFormat;
     uint32_t glType;
     uint32_t dataSize;
 };
 
 #pragma pack(pop)
+
+inline uint32_t HashResourceName(const std::string& name) {
+    uint32_t h = 0x811c9dc5;
+    for (char c : name) {
+        uint8_t b = static_cast<uint8_t>(std::tolower(static_cast<unsigned char>(c)));
+        h = (h ^ b) * 0x01000193;
+    }
+    return h;
+}
+
+class CookedBundleReader {
+public:
+    CookedBundleReader() = default;
+
+    bool Open(const uint8_t* data, size_t size) {
+        if (!data || size < sizeof(CookedBundleHeader)) return false;
+        m_data = data;
+        m_size = size;
+
+        const auto* header = reinterpret_cast<const CookedBundleHeader*>(m_data);
+        if (header->magic != SSVPAK_MAGIC || header->version != SSVPAK_VERSION) {
+            return false;
+        }
+
+        if (header->tocOffset + header->resourceCount * sizeof(CookedResourceEntry) > m_size) {
+            return false;
+        }
+
+        m_entries = reinterpret_cast<const CookedResourceEntry*>(m_data + header->tocOffset);
+        m_count = header->resourceCount;
+        return true;
+    }
+
+    const CookedResourceEntry* FindEntry(const std::string& name) const {
+        return FindEntry(HashResourceName(name));
+    }
+
+    const CookedResourceEntry* FindEntry(uint32_t nameHash) const {
+        for (uint32_t i = 0; i < m_count; ++i) {
+            if (m_entries[i].nameHash == nameHash) {
+                return &m_entries[i];
+            }
+        }
+        return nullptr;
+    }
+
+    const uint8_t* GetEntryData(const CookedResourceEntry* entry) const {
+        if (!entry || !m_data) return nullptr;
+        if (entry->dataOffset + entry->dataSize > m_size) return nullptr;
+        return m_data + entry->dataOffset;
+    }
+
+    uint32_t GetResourceCount() const { return m_count; }
+
+private:
+    const uint8_t* m_data = nullptr;
+    size_t m_size = 0;
+    const CookedResourceEntry* m_entries = nullptr;
+    uint32_t m_count = 0;
+};
 
 } // namespace SSV
