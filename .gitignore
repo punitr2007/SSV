@@ -27,6 +27,8 @@ local.properties
 # IDE & Editor files
 .vscode/
 .idea/
+__pycache__/
+*.pyc
 *.swp
 *.swo
 *~

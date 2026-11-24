@@ -33,7 +33,7 @@ def parse_ark(file_path):
             entry_data = f.read(20)
             if len(entry_data) < 20:
                 break
-            offset, comp_sz, uncomp_sz, flags, name_hash = struct.unpack("<5I", entry_data)
+            offset, name_hash, flags, uncomp_sz, comp_sz = struct.unpack("<5I", entry_data)
             entries.append({
                 "index": i,
                 "offset": offset,

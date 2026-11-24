@@ -28,11 +28,11 @@ struct ArkHeader {
 };
 
 struct ArkEntry {
-    uint32_t offset;            // Absolute file offset within .ark container
-    uint32_t compressedSize;    // Size of stored stream in bytes
-    uint32_t uncompressedSize;  // Original uncompressed byte count
-    uint32_t flags;             // Bit 0: 1 = LZSS Compressed, 0 = Raw
-    uint32_t nameHash;          // 32-bit hash of normalized asset path
+    uint32_t offset;            // 0x00: Absolute file offset within .ark container
+    uint32_t nameHash;          // 0x04: 32-bit hash of normalized asset path (sorted)
+    uint32_t flags;             // 0x08: Flags (Bit 0: 1 = LZSS Compressed, 0 = Raw)
+    uint32_t uncompressedSize;  // 0x0C: Original uncompressed byte count
+    uint32_t compressedSize;    // 0x10: Size of stored stream on disk in bytes
 };
 #pragma pack(pop)
 

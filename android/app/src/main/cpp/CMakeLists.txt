@@ -14,13 +14,9 @@ include_directories(
     "${ANDROID_NDK}/sources/android/native_app_glue"
 )
 
-# Build android_native_app_glue helper
-add_library(app_glue STATIC
-    "${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
-)
-
 set(SSV_SOURCES
     "android_main.cpp"
+    "${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
     "${SSV_ROOT}/src/platform/platform_android.cpp"
     "${SSV_ROOT}/src/render/gles3/gles3_backend.cpp"
     "${SSV_ROOT}/src/assets/ark_parser.cpp"
@@ -37,7 +33,6 @@ target_compile_definitions(ssv PRIVATE
 )
 
 target_link_libraries(ssv PRIVATE
-    app_glue
     android
     log
     EGL
