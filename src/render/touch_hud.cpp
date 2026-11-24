@@ -67,97 +67,86 @@ static const char* s_HudFragmentShader =
 "in float vPressed;\n"
 "in float vSelected;\n"
 "\n"
+"uniform sampler2D uAtlas;\n"
+"\n"
 "out vec4 FragColor;\n"
 "\n"
 "void main() {\n"
-"    vec2 uv = vUV;\n"
-"    vec2 centered = uv - vec2(0.5);\n"
+"    // ------------------------------------------------------------------------\n"
+"    // Mode 5.0+: Textured Atlas Quad (Font Glyph or Vector Icon)\n"
+"    // ------------------------------------------------------------------------\n"
+"    if (vShape > 4.5) {\n"
+"        float alphaMask = texture(uAtlas, vUV).a;\n"
+"        if (alphaMask < 0.01) discard;\n"
+"        FragColor = vec4(vColor.rgb, vColor.a * alphaMask);\n"
+"        return;\n"
+"    }\n"
+"\n"
+"    // ------------------------------------------------------------------------\n"
+"    // Mode 0.0 .. 4.0: High-End Translucent Dark Glass Control Card\n"
+"    // ------------------------------------------------------------------------\n"
+"    vec2 centered = vUV - vec2(0.5);\n"
 "    float dist = 0.0;\n"
 "    float alpha = 1.0;\n"
-"    vec3 finalColor = vColor.rgb;\n"
+"    float border = 0.0;\n"
 "\n"
-"    // 0: Round Button (P1, P2, Settings, Reset, Cam)\n"
+"    // 0: Round / Circular Action Card (P1, P2, Cam, Reset, Settings)\n"
 "    if (vShape < 0.5) {\n"
 "        dist = length(centered) * 2.0;\n"
-"        alpha = 1.0 - smoothstep(0.92, 1.0, dist);\n"
-"        // Outer ring glow\n"
-"        float ring = smoothstep(0.78, 0.85, dist) * (1.0 - smoothstep(0.95, 1.0, dist));\n"
-"        // Inner core symbol glow\n"
-"        float core = 1.0 - smoothstep(0.0, 0.45, dist);\n"
-"        if (vPressed > 0.5) {\n"
-"            finalColor = mix(vColor.rgb, vAccentColor.rgb, 0.85) + ring * vAccentColor.rgb * 0.5;\n"
-"        } else {\n"
-"            finalColor = vColor.rgb + ring * vAccentColor.rgb * 0.4 + core * vAccentColor.rgb * 0.2;\n"
-"        }\n"
+"        alpha = 1.0 - smoothstep(0.95, 1.0, dist);\n"
+"        border = smoothstep(0.86, 0.93, dist) * (1.0 - smoothstep(0.97, 1.0, dist));\n"
 "    }\n"
-"    // 1: Pedal (Throttle, Brake)\n"
+"    // 1: Pedal Card (Gas, Brake)\n"
 "    else if (vShape < 1.5) {\n"
-"        vec2 d = abs(centered) - vec2(0.42, 0.44);\n"
+"        vec2 d = abs(centered) - vec2(0.40, 0.44);\n"
 "        dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n"
-"        alpha = 1.0 - smoothstep(0.0, 0.08, dist);\n"
-"        // Horizontal anti-slip grip ribs\n"
-"        float rib = sin(uv.y * 38.0);\n"
-"        float ribGlow = smoothstep(0.2, 0.8, rib) * 0.25;\n"
-"        if (vPressed > 0.5) {\n"
-"            finalColor = mix(vColor.rgb, vAccentColor.rgb, 0.85) + ribGlow * vAccentColor.rgb;\n"
-"        } else {\n"
-"            finalColor = vColor.rgb + ribGlow * vAccentColor.rgb * 0.5;\n"
-"        }\n"
+"        alpha = 1.0 - smoothstep(0.0, 0.07, dist);\n"
+"        border = 1.0 - smoothstep(0.0, 0.035, abs(dist - 0.015));\n"
 "    }\n"
-"    // 2: Pill (Handbrake / Drift)\n"
+"    // 2: Pill Card (Handbrake / Drift)\n"
 "    else if (vShape < 2.5) {\n"
 "        vec2 d = abs(centered) - vec2(0.38, 0.32);\n"
 "        dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n"
-"        alpha = 1.0 - smoothstep(0.0, 0.10, dist);\n"
-"        float border = smoothstep(0.0, 0.04, abs(dist - 0.02));\n"
-"        if (vPressed > 0.5) {\n"
-"            finalColor = mix(vColor.rgb, vAccentColor.rgb, 0.90);\n"
-"        } else {\n"
-"            finalColor = vColor.rgb + (1.0 - border) * vAccentColor.rgb * 0.4;\n"
-"        }\n"
+"        alpha = 1.0 - smoothstep(0.0, 0.08, dist);\n"
+"        border = 1.0 - smoothstep(0.0, 0.035, abs(dist - 0.015));\n"
 "    }\n"
-"    // 3: Arrow Left (Steer Left)\n"
+"    // 3: Rounded Rectangle Card (Steer Left, Steer Right)\n"
 "    else if (vShape < 3.5) {\n"
-"        // Rounded rect container\n"
-"        vec2 d = abs(centered) - vec2(0.38, 0.38);\n"
+"        vec2 d = abs(centered) - vec2(0.40, 0.40);\n"
 "        dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n"
-"        alpha = 1.0 - smoothstep(0.0, 0.08, dist);\n"
-"        // Chevron pointing left: (x - 0.5) + abs(y - 0.5) < 0.25\n"
-"        float chev = abs(uv.y - 0.5) * 1.5 + (uv.x - 0.30);\n"
-"        float chevronGlow = smoothstep(0.28, 0.24, chev) * smoothstep(0.10, 0.16, chev);\n"
-"        if (vPressed > 0.5) {\n"
-"            finalColor = mix(vColor.rgb, vAccentColor.rgb, 0.80) + chevronGlow * vec3(1.0);\n"
-"        } else {\n"
-"            finalColor = vColor.rgb + chevronGlow * vAccentColor.rgb * 0.7;\n"
-"        }\n"
+"        alpha = 1.0 - smoothstep(0.0, 0.07, dist);\n"
+"        border = 1.0 - smoothstep(0.0, 0.035, abs(dist - 0.015));\n"
 "    }\n"
-"    // 4: Arrow Right (Steer Right)\n"
-"    else if (vShape < 4.5) {\n"
-"        vec2 d = abs(centered) - vec2(0.38, 0.38);\n"
-"        dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n"
-"        alpha = 1.0 - smoothstep(0.0, 0.08, dist);\n"
-"        // Chevron pointing right: (0.70 - x) + abs(y - 0.5) < 0.25\n"
-"        float chev = abs(uv.y - 0.5) * 1.5 + (0.70 - uv.x);\n"
-"        float chevronGlow = smoothstep(0.28, 0.24, chev) * smoothstep(0.10, 0.16, chev);\n"
-"        if (vPressed > 0.5) {\n"
-"            finalColor = mix(vColor.rgb, vAccentColor.rgb, 0.80) + chevronGlow * vec3(1.0);\n"
-"        } else {\n"
-"            finalColor = vColor.rgb + chevronGlow * vAccentColor.rgb * 0.7;\n"
-"        }\n"
-"    }\n"
-"    // 5: Toolbar Button (Layout Editor)\n"
+"    // 4: Toolbar Card (Edit Mode)\n"
 "    else {\n"
 "        vec2 d = abs(centered) - vec2(0.44, 0.38);\n"
 "        dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n"
 "        alpha = 1.0 - smoothstep(0.0, 0.06, dist);\n"
-"        finalColor = vColor.rgb;\n"
+"        border = 1.0 - smoothstep(0.0, 0.03, abs(dist - 0.01));\n"
 "    }\n"
 "\n"
-"    // In Layout Editor Mode: draw pulsing selection outline if selected\n"
+"    if (alpha <= 0.005) discard;\n"
+"\n"
+"    // Sleek frosted glass gradient: lighter at top, deeper dark at bottom\n"
+"    float topGradient = clamp((0.5 - centered.y) * 0.15, -0.05, 0.15);\n"
+"    vec3 baseGlass = vColor.rgb + vec3(topGradient);\n"
+"\n"
+"    vec3 finalColor;\n"
+"    if (vPressed > 0.5) {\n"
+"        // Pressed state: vibrant glowing neon border and rich saturated glass\n"
+"        vec3 glowBorder = mix(vColor.rgb, vAccentColor.rgb, 0.95);\n"
+"        finalColor = mix(baseGlass, glowBorder, border * 0.90);\n"
+"    } else {\n"
+"        // Idle state: subtle crisp stroke\n"
+"        vec3 strokeCol = mix(vec3(1.0), vAccentColor.rgb, 0.25);\n"
+"        finalColor = mix(baseGlass, strokeCol, border * 0.55);\n"
+"    }\n"
+"\n"
+"    // Edit Mode Selection highlight (pulsing gold outline)\n"
 "    if (vSelected > 0.5) {\n"
-"        float borderDist = abs(max(abs(centered.x), abs(centered.y)) - 0.48);\n"
-"        float selectionRing = 1.0 - smoothstep(0.0, 0.05, borderDist);\n"
-"        finalColor = mix(finalColor, vec3(1.0, 0.9, 0.1), selectionRing * 0.85);\n"
+"        float selectDist = abs(max(abs(centered.x), abs(centered.y)) - 0.46);\n"
+"        float selectRing = 1.0 - smoothstep(0.0, 0.04, selectDist);\n"
+"        finalColor = mix(finalColor, vec3(1.0, 0.85, 0.1), selectRing * 0.90);\n"
 "    }\n"
 "\n"
 "    FragColor = vec4(finalColor, alpha * vColor.a);\n"
@@ -176,38 +165,38 @@ TouchHUD::~TouchHUD() {
 void TouchHUD::InitDefaultControls() {
     m_controls.clear();
 
-    // 1. Steering Left Arrow (Bottom Left)
+    // 1. Steering Left Arrow Card (Bottom Left)
     {
         VirtualControl ctrl;
         ctrl.id = TouchControlId::SteerLeft;
         ctrl.name = "steer_left";
         ctrl.label = "LEFT";
-        ctrl.normX = 0.04f;
-        ctrl.normY = 0.68f;
+        ctrl.normX = 0.03f;
+        ctrl.normY = 0.66f;
         ctrl.normW = 0.11f;
         ctrl.normH = 0.22f;
-        ctrl.shape = ControlShape::ArrowLeft;
-        ctrl.idleColor = Vector4{0.10f, 0.12f, 0.16f, 0.75f};
-        ctrl.activeColor = Vector4{0.20f, 0.85f, 1.00f, 0.95f};
-        ctrl.accentColor = Vector4{0.00f, 0.80f, 1.00f, 1.00f};
+        ctrl.shape = ControlShape::Card;
+        ctrl.idleColor = Vector4{0.07f, 0.10f, 0.15f, 0.65f};
+        ctrl.activeColor = Vector4{0.12f, 0.24f, 0.32f, 0.88f};
+        ctrl.accentColor = Vector4{0.00f, 0.85f, 1.00f, 1.00f};
         ctrl.directInputScan = 0xCB; // Left Arrow
         m_controls.push_back(ctrl);
     }
 
-    // 2. Steering Right Arrow (Bottom Left, adjacent)
+    // 2. Steering Right Arrow Card (Bottom Left, adjacent)
     {
         VirtualControl ctrl;
         ctrl.id = TouchControlId::SteerRight;
         ctrl.name = "steer_right";
         ctrl.label = "RIGHT";
-        ctrl.normX = 0.17f;
-        ctrl.normY = 0.68f;
+        ctrl.normX = 0.15f;
+        ctrl.normY = 0.66f;
         ctrl.normW = 0.11f;
         ctrl.normH = 0.22f;
-        ctrl.shape = ControlShape::ArrowRight;
-        ctrl.idleColor = Vector4{0.10f, 0.12f, 0.16f, 0.75f};
-        ctrl.activeColor = Vector4{0.20f, 0.85f, 1.00f, 0.95f};
-        ctrl.accentColor = Vector4{0.00f, 0.80f, 1.00f, 1.00f};
+        ctrl.shape = ControlShape::Card;
+        ctrl.idleColor = Vector4{0.07f, 0.10f, 0.15f, 0.65f};
+        ctrl.activeColor = Vector4{0.12f, 0.24f, 0.32f, 0.88f};
+        ctrl.accentColor = Vector4{0.00f, 0.85f, 1.00f, 1.00f};
         ctrl.directInputScan = 0xCD; // Right Arrow
         m_controls.push_back(ctrl);
     }
@@ -219,13 +208,13 @@ void TouchHUD::InitDefaultControls() {
         ctrl.name = "throttle";
         ctrl.label = "GAS";
         ctrl.normX = 0.88f;
-        ctrl.normY = 0.58f;
+        ctrl.normY = 0.56f;
         ctrl.normW = 0.09f;
-        ctrl.normH = 0.36f;
+        ctrl.normH = 0.38f;
         ctrl.shape = ControlShape::Pedal;
-        ctrl.idleColor = Vector4{0.10f, 0.14f, 0.10f, 0.80f};
-        ctrl.activeColor = Vector4{0.20f, 0.90f, 0.35f, 0.95f};
-        ctrl.accentColor = Vector4{0.25f, 0.95f, 0.40f, 1.00f};
+        ctrl.idleColor = Vector4{0.06f, 0.12f, 0.08f, 0.70f};
+        ctrl.activeColor = Vector4{0.12f, 0.32f, 0.16f, 0.90f};
+        ctrl.accentColor = Vector4{0.22f, 0.95f, 0.35f, 1.00f};
         ctrl.directInputScan = 0xC8; // Up Arrow
         m_controls.push_back(ctrl);
     }
@@ -236,14 +225,14 @@ void TouchHUD::InitDefaultControls() {
         ctrl.id = TouchControlId::Brake;
         ctrl.name = "brake";
         ctrl.label = "BRAKE";
-        ctrl.normX = 0.76f;
+        ctrl.normX = 0.77f;
         ctrl.normY = 0.68f;
         ctrl.normW = 0.09f;
         ctrl.normH = 0.26f;
         ctrl.shape = ControlShape::Pedal;
-        ctrl.idleColor = Vector4{0.16f, 0.10f, 0.10f, 0.80f};
-        ctrl.activeColor = Vector4{0.95f, 0.25f, 0.20f, 0.95f};
-        ctrl.accentColor = Vector4{1.00f, 0.30f, 0.25f, 1.00f};
+        ctrl.idleColor = Vector4{0.14f, 0.07f, 0.07f, 0.70f};
+        ctrl.activeColor = Vector4{0.34f, 0.12f, 0.12f, 0.90f};
+        ctrl.accentColor = Vector4{1.00f, 0.25f, 0.20f, 1.00f};
         ctrl.directInputScan = 0xD0; // Down Arrow
         m_controls.push_back(ctrl);
     }
@@ -254,14 +243,14 @@ void TouchHUD::InitDefaultControls() {
         ctrl.id = TouchControlId::Handbrake;
         ctrl.name = "handbrake";
         ctrl.label = "DRIFT";
-        ctrl.normX = 0.76f;
+        ctrl.normX = 0.77f;
         ctrl.normY = 0.48f;
         ctrl.normW = 0.09f;
-        ctrl.normH = 0.16f;
+        ctrl.normH = 0.17f;
         ctrl.shape = ControlShape::Pill;
-        ctrl.idleColor = Vector4{0.18f, 0.14f, 0.08f, 0.80f};
-        ctrl.activeColor = Vector4{1.00f, 0.75f, 0.15f, 0.95f};
-        ctrl.accentColor = Vector4{1.00f, 0.80f, 0.20f, 1.00f};
+        ctrl.idleColor = Vector4{0.14f, 0.10f, 0.05f, 0.70f};
+        ctrl.activeColor = Vector4{0.32f, 0.22f, 0.08f, 0.90f};
+        ctrl.accentColor = Vector4{1.00f, 0.70f, 0.10f, 1.00f};
         ctrl.directInputScan = 0x39; // Spacebar
         m_controls.push_back(ctrl);
     }
@@ -272,14 +261,14 @@ void TouchHUD::InitDefaultControls() {
         ctrl.id = TouchControlId::Powerplay1;
         ctrl.name = "powerplay1";
         ctrl.label = "P1";
-        ctrl.normX = 0.64f;
-        ctrl.normY = 0.68f;
+        ctrl.normX = 0.65f;
+        ctrl.normY = 0.70f;
         ctrl.normW = 0.09f;
         ctrl.normH = 0.18f;
         ctrl.shape = ControlShape::Round;
-        ctrl.idleColor = Vector4{0.08f, 0.14f, 0.22f, 0.85f};
-        ctrl.activeColor = Vector4{0.00f, 0.85f, 1.00f, 1.00f};
-        ctrl.accentColor = Vector4{0.10f, 0.90f, 1.00f, 1.00f};
+        ctrl.idleColor = Vector4{0.06f, 0.12f, 0.20f, 0.75f};
+        ctrl.activeColor = Vector4{0.10f, 0.28f, 0.45f, 0.92f};
+        ctrl.accentColor = Vector4{0.00f, 0.85f, 1.00f, 1.00f};
         ctrl.directInputScan = 0x10; // Q / Key 1
         m_controls.push_back(ctrl);
     }
@@ -290,14 +279,14 @@ void TouchHUD::InitDefaultControls() {
         ctrl.id = TouchControlId::Powerplay2;
         ctrl.name = "powerplay2";
         ctrl.label = "P2";
-        ctrl.normX = 0.64f;
-        ctrl.normY = 0.46f;
+        ctrl.normX = 0.65f;
+        ctrl.normY = 0.48f;
         ctrl.normW = 0.09f;
         ctrl.normH = 0.18f;
         ctrl.shape = ControlShape::Round;
-        ctrl.idleColor = Vector4{0.22f, 0.08f, 0.08f, 0.85f};
-        ctrl.activeColor = Vector4{1.00f, 0.25f, 0.10f, 1.00f};
-        ctrl.accentColor = Vector4{1.00f, 0.35f, 0.20f, 1.00f};
+        ctrl.idleColor = Vector4{0.18f, 0.06f, 0.06f, 0.75f};
+        ctrl.activeColor = Vector4{0.45f, 0.12f, 0.10f, 0.92f};
+        ctrl.accentColor = Vector4{1.00f, 0.20f, 0.05f, 1.00f};
         ctrl.directInputScan = 0x12; // E / Key 2
         m_controls.push_back(ctrl);
     }
@@ -308,14 +297,14 @@ void TouchHUD::InitDefaultControls() {
         ctrl.id = TouchControlId::Camera;
         ctrl.name = "camera";
         ctrl.label = "CAM";
-        ctrl.normX = 0.12f;
+        ctrl.normX = 0.11f;
         ctrl.normY = 0.04f;
-        ctrl.normW = 0.07f;
+        ctrl.normW = 0.065f;
         ctrl.normH = 0.11f;
         ctrl.shape = ControlShape::Round;
-        ctrl.idleColor = Vector4{0.12f, 0.14f, 0.18f, 0.70f};
-        ctrl.activeColor = Vector4{0.70f, 0.80f, 1.00f, 0.95f};
-        ctrl.accentColor = Vector4{0.60f, 0.75f, 0.95f, 1.00f};
+        ctrl.idleColor = Vector4{0.08f, 0.10f, 0.14f, 0.65f};
+        ctrl.activeColor = Vector4{0.16f, 0.24f, 0.36f, 0.88f};
+        ctrl.accentColor = Vector4{0.65f, 0.80f, 1.00f, 1.00f};
         ctrl.directInputScan = 0x2E; // C
         m_controls.push_back(ctrl);
     }
@@ -328,12 +317,12 @@ void TouchHUD::InitDefaultControls() {
         ctrl.label = "RESET";
         ctrl.normX = 0.03f;
         ctrl.normY = 0.04f;
-        ctrl.normW = 0.07f;
+        ctrl.normW = 0.065f;
         ctrl.normH = 0.11f;
         ctrl.shape = ControlShape::Round;
-        ctrl.idleColor = Vector4{0.12f, 0.14f, 0.18f, 0.70f};
-        ctrl.activeColor = Vector4{0.95f, 0.70f, 0.20f, 0.95f};
-        ctrl.accentColor = Vector4{1.00f, 0.80f, 0.30f, 1.00f};
+        ctrl.idleColor = Vector4{0.08f, 0.10f, 0.14f, 0.65f};
+        ctrl.activeColor = Vector4{0.30f, 0.22f, 0.08f, 0.88f};
+        ctrl.accentColor = Vector4{1.00f, 0.85f, 0.25f, 1.00f};
         ctrl.directInputScan = 0x13; // R
         m_controls.push_back(ctrl);
     }
@@ -344,14 +333,14 @@ void TouchHUD::InitDefaultControls() {
         ctrl.id = TouchControlId::Settings;
         ctrl.name = "settings";
         ctrl.label = "EDIT";
-        ctrl.normX = 0.90f;
+        ctrl.normX = 0.91f;
         ctrl.normY = 0.04f;
-        ctrl.normW = 0.07f;
+        ctrl.normW = 0.065f;
         ctrl.normH = 0.11f;
         ctrl.shape = ControlShape::Round;
-        ctrl.idleColor = Vector4{0.15f, 0.15f, 0.18f, 0.75f};
-        ctrl.activeColor = Vector4{1.00f, 0.90f, 0.20f, 0.95f};
-        ctrl.accentColor = Vector4{1.00f, 0.95f, 0.30f, 1.00f};
+        ctrl.idleColor = Vector4{0.10f, 0.10f, 0.12f, 0.65f};
+        ctrl.activeColor = Vector4{0.32f, 0.28f, 0.08f, 0.88f};
+        ctrl.accentColor = Vector4{1.00f, 0.90f, 0.20f, 1.00f};
         ctrl.directInputScan = 0x01; // ESC
         m_controls.push_back(ctrl);
     }
@@ -387,6 +376,10 @@ void TouchHUD::Resize(float screenW, float screenH) {
 }
 
 void TouchHUD::Shutdown() {
+    if (m_atlasTexture) {
+        glDeleteTextures(1, &m_atlasTexture);
+        m_atlasTexture = 0;
+    }
     if (m_program) {
         glDeleteProgram(m_program);
         m_program = 0;
@@ -454,7 +447,9 @@ void TouchHUD::BuildShader() {
 
     m_uResolution = glGetUniformLocation(m_program, "uResolution");
     m_uGlobalOpacity = glGetUniformLocation(m_program, "uGlobalOpacity");
+    m_uAtlas = glGetUniformLocation(m_program, "uAtlas");
 
+    // Setup Geometry Buffers
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
     glGenBuffers(1, &m_ebo);
@@ -463,30 +458,57 @@ void TouchHUD::BuildShader() {
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
     constexpr GLsizei stride = sizeof(HudVertex);
-    // aPos
+    // aPos (location 0)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, x));
-    // aUV
+    // aUV (location 1)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, u));
-    // aColor
+    // aColor (location 2)
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, color));
-    // aAccentColor
+    // aAccentColor (location 3)
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, accentColor));
-    // aShape
+    // aShape (location 4)
     glEnableVertexAttribArray(4);
     glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, shapeType));
-    // aPressed
+    // aPressed (location 5)
     glEnableVertexAttribArray(5);
     glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, isPressed));
-    // aSelected
+    // aSelected (location 6)
     glEnableVertexAttribArray(6);
     glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, stride, (void*)offsetof(HudVertex, isSelected));
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // Setup Font & Vector Icon Atlas Texture
+    glGenTextures(1, &m_atlasTexture);
+    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+
+    std::vector<uint8_t> rgbaBuffer(HUD_ATLAS_WIDTH * HUD_ATLAS_HEIGHT * 4, 255);
+    size_t outIdx = 0;
+    for (size_t i = 0; i < sizeof(g_HudAtlasRLE); i += 2) {
+        uint8_t count = g_HudAtlasRLE[i];
+        uint8_t alpha = g_HudAtlasRLE[i + 1];
+        for (uint8_t k = 0; k < count; ++k) {
+            rgbaBuffer[outIdx + 0] = 255;
+            rgbaBuffer[outIdx + 1] = 255;
+            rgbaBuffer[outIdx + 2] = 255;
+            rgbaBuffer[outIdx + 3] = alpha;
+            outIdx += 4;
+        }
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, HUD_ATLAS_WIDTH, HUD_ATLAS_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgbaBuffer.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     m_glInitialized = true;
 }
@@ -544,7 +566,7 @@ void TouchHUD::OnPointerDown(int32_t pointerId, float screenX, float screenY) {
         float toolbarH = 0.08f * m_screenHeight;
         if (screenY >= toolbarY && screenY <= (toolbarY + toolbarH)) {
             float btnW = 0.10f * m_screenWidth;
-            // [SAVE / EXIT] at x = 0.28
+            // [SAVE / DONE] at x = 0.28
             float saveX = 0.28f * m_screenWidth;
             if (screenX >= saveX && screenX <= (saveX + btnW)) {
                 SetEditMode(false);
@@ -627,7 +649,6 @@ void TouchHUD::OnPointerMove(int32_t pointerId, float screenX, float screenY) {
     if (!m_editMode && pointerId >= 0 && (size_t)pointerId < MAX_TRACKED_FINGERS) {
         int currentCtrlIdx = m_fingerMap[pointerId];
         if (currentCtrlIdx >= 0 && (size_t)currentCtrlIdx < m_controls.size()) {
-            // Check if finger drifted to neighbor
             if (!m_controls[currentCtrlIdx].Contains(screenX, screenY, m_screenWidth, m_screenHeight)) {
                 m_controls[currentCtrlIdx].isHeld = false;
                 m_controls[currentCtrlIdx].activePointerId = -1;
@@ -713,25 +734,19 @@ void TouchHUD::UpdateInputState(InputState& outState, bool& outResetTriggered) {
     outState.steer = std::clamp(outState.steer, -1.0f, 1.0f);
 }
 
-void TouchHUD::AppendControlQuad(const VirtualControl& ctrl,
-                                 std::vector<HudVertex>& outVertices,
-                                 std::vector<uint16_t>& outIndices) {
-    float px, py, pw, ph;
-    ctrl.GetPixelRect(m_screenWidth, m_screenHeight, px, py, pw, ph);
-
+void TouchHUD::AppendCardQuad(float px, float py, float pw, float ph, float shapeType,
+                             const Vector4& fillColor, const Vector4& strokeColor,
+                             bool isPressed, bool isSelected,
+                             std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices) {
     uint16_t baseIdx = (uint16_t)outVertices.size();
 
-    float shapeVal = (float)(int)ctrl.shape;
-    float pressedVal = ctrl.isHeld ? 1.0f : 0.0f;
-    float selectedVal = (m_editMode && m_selectedControlIndex >= 0 &&
-                         m_controls[m_selectedControlIndex].id == ctrl.id) ? 1.0f : 0.0f;
+    float pressedVal = isPressed ? 1.0f : 0.0f;
+    float selectedVal = isSelected ? 1.0f : 0.0f;
 
-    Vector4 col = ctrl.isHeld ? ctrl.activeColor : ctrl.idleColor;
-
-    HudVertex v0{ px,      py,      0.0f, 0.0f, col, ctrl.accentColor, shapeVal, pressedVal, selectedVal };
-    HudVertex v1{ px + pw, py,      1.0f, 0.0f, col, ctrl.accentColor, shapeVal, pressedVal, selectedVal };
-    HudVertex v2{ px + pw, py + ph, 1.0f, 1.0f, col, ctrl.accentColor, shapeVal, pressedVal, selectedVal };
-    HudVertex v3{ px,      py + ph, 0.0f, 1.0f, col, ctrl.accentColor, shapeVal, pressedVal, selectedVal };
+    HudVertex v0{ px,      py,      0.0f, 0.0f, fillColor, strokeColor, shapeType, pressedVal, selectedVal };
+    HudVertex v1{ px + pw, py,      1.0f, 0.0f, fillColor, strokeColor, shapeType, pressedVal, selectedVal };
+    HudVertex v2{ px + pw, py + ph, 1.0f, 1.0f, fillColor, strokeColor, shapeType, pressedVal, selectedVal };
+    HudVertex v3{ px,      py + ph, 0.0f, 1.0f, fillColor, strokeColor, shapeType, pressedVal, selectedVal };
 
     outVertices.push_back(v0);
     outVertices.push_back(v1);
@@ -746,19 +761,21 @@ void TouchHUD::AppendControlQuad(const VirtualControl& ctrl,
     outIndices.push_back(baseIdx + 3);
 }
 
-void TouchHUD::AppendToolbarQuad(float x, float y, float w, float h, const std::string& /*label*/, const Vector4& col,
-                                 std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices) {
+void TouchHUD::AppendAtlasQuad(float px, float py, float pw, float ph,
+                              float u0, float v0, float u1, float v1,
+                              const Vector4& color,
+                              std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices) {
     uint16_t baseIdx = (uint16_t)outVertices.size();
 
-    HudVertex v0{ x,     y,     0.0f, 0.0f, col, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
-    HudVertex v1{ x + w, y,     1.0f, 0.0f, col, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
-    HudVertex v2{ x + w, y + h, 1.0f, 1.0f, col, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
-    HudVertex v3{ x,     y + h, 0.0f, 1.0f, col, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
+    HudVertex vert0{ px,      py,      u0, v0, color, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
+    HudVertex vert1{ px + pw, py,      u1, v0, color, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
+    HudVertex vert2{ px + pw, py + ph, u1, v1, color, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
+    HudVertex vert3{ px,      py + ph, u0, v1, color, Vector4{1, 1, 1, 1}, 5.0f, 0.0f, 0.0f };
 
-    outVertices.push_back(v0);
-    outVertices.push_back(v1);
-    outVertices.push_back(v2);
-    outVertices.push_back(v3);
+    outVertices.push_back(vert0);
+    outVertices.push_back(vert1);
+    outVertices.push_back(vert2);
+    outVertices.push_back(vert3);
 
     outIndices.push_back(baseIdx + 0);
     outIndices.push_back(baseIdx + 1);
@@ -766,6 +783,162 @@ void TouchHUD::AppendToolbarQuad(float x, float y, float w, float h, const std::
     outIndices.push_back(baseIdx + 0);
     outIndices.push_back(baseIdx + 2);
     outIndices.push_back(baseIdx + 3);
+}
+
+void TouchHUD::AppendIcon(HudIconId icon, float cx, float cy, float size,
+                          const Vector4& color,
+                          std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices) {
+    int idx = (int)icon;
+    if (idx < 0 || idx >= 16) return;
+    const auto& uv = g_IconUVs[idx];
+    float x = cx - size * 0.5f;
+    float y = cy - size * 0.5f;
+    AppendAtlasQuad(x, y, size, size, uv.u0, uv.v0, uv.u1, uv.v1, color, outVertices, outIndices);
+}
+
+void TouchHUD::AppendText(const std::string& text, float cx, float cy, float scale,
+                          const Vector4& color,
+                          std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices) {
+    if (text.empty()) return;
+
+    float totalWidth = 0.0f;
+    for (char c : text) {
+        int idx = (int)(unsigned char)c - HUD_GLYPH_START;
+        if (idx >= 0 && idx < HUD_GLYPH_COUNT) {
+            totalWidth += g_GlyphMetrics[idx].advance * scale;
+        } else {
+            totalWidth += 8.0f * scale;
+        }
+    }
+
+    float startX = cx - totalWidth * 0.5f;
+    float startY = cy - (13.0f * scale);
+
+    float curX = startX;
+    for (char c : text) {
+        int idx = (int)(unsigned char)c - HUD_GLYPH_START;
+        if (idx >= 0 && idx < HUD_GLYPH_COUNT) {
+            const auto& m = g_GlyphMetrics[idx];
+            if (m.width > 0.0f) {
+                float gw = m.width * scale;
+                float gh = m.height * scale;
+                AppendAtlasQuad(curX, startY, gw, gh, m.u0, m.v0, m.u1, m.v1, color, outVertices, outIndices);
+            }
+            curX += m.advance * scale;
+        } else {
+            curX += 8.0f * scale;
+        }
+    }
+}
+
+void TouchHUD::AppendControlQuad(const VirtualControl& ctrl,
+                                 std::vector<HudVertex>& outVertices,
+                                 std::vector<uint16_t>& outIndices) {
+    float px, py, pw, ph;
+    ctrl.GetPixelRect(m_screenWidth, m_screenHeight, px, py, pw, ph);
+
+    float cx = px + pw * 0.5f;
+    float cy = py + ph * 0.5f;
+
+    bool isPressed = ctrl.isHeld;
+    bool isSelected = (m_editMode && m_selectedControlIndex >= 0 &&
+                       m_controls[m_selectedControlIndex].id == ctrl.id);
+
+    // 1. Base Glass Card
+    float shapeVal = (float)(int)ctrl.shape;
+    Vector4 cardFill = isPressed ? ctrl.activeColor : ctrl.idleColor;
+    AppendCardQuad(px, py, pw, ph, shapeVal, cardFill, ctrl.accentColor, isPressed, isSelected, outVertices, outIndices);
+
+    // 2. High-Impact Ink Color
+    Vector4 inkColor = isPressed ? ctrl.accentColor : Vector4{0.90f, 0.93f, 0.98f, 0.88f};
+
+    // 3. Render Crisp Vector Icons & Bold Typography
+    switch (ctrl.id) {
+        case TouchControlId::Throttle: {
+            float iconSize = std::min(pw * 0.72f, ph * 0.40f);
+            AppendIcon(HudIconId::GasChevrons, cx, cy - ph * 0.16f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("GAS", cx, cy + ph * 0.28f, 1.25f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Brake: {
+            float iconSize = std::min(pw * 0.72f, ph * 0.40f);
+            AppendIcon(HudIconId::BrakeChevrons, cx, cy - ph * 0.16f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("BRAKE", cx, cy + ph * 0.26f, 1.05f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::SteerLeft: {
+            float iconSize = std::min(pw * 0.55f, ph * 0.50f);
+            AppendIcon(HudIconId::SteerLeft, cx, cy - ph * 0.10f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("LEFT", cx, cy + ph * 0.28f, 0.95f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::SteerRight: {
+            float iconSize = std::min(pw * 0.55f, ph * 0.50f);
+            AppendIcon(HudIconId::SteerRight, cx, cy - ph * 0.10f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("RIGHT", cx, cy + ph * 0.28f, 0.95f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Handbrake: {
+            float iconSize = std::min(pw * 0.55f, ph * 0.50f);
+            AppendIcon(HudIconId::Drift, cx, cy - ph * 0.12f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("DRIFT", cx, cy + ph * 0.25f, 0.95f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Powerplay1: {
+            float iconSize = std::min(pw * 0.78f, ph * 0.78f);
+            AppendIcon(HudIconId::TacticalP1, cx, cy - ph * 0.05f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("LVL 1", cx, cy + ph * 0.33f, 0.85f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Powerplay2: {
+            float iconSize = std::min(pw * 0.78f, ph * 0.78f);
+            AppendIcon(HudIconId::CataclysmP2, cx, cy - ph * 0.05f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("LVL 2", cx, cy + ph * 0.33f, 0.85f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Camera: {
+            float iconSize = std::min(pw * 0.55f, ph * 0.50f);
+            AppendIcon(HudIconId::Camera, cx, cy - ph * 0.10f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("CAM", cx, cy + ph * 0.27f, 0.80f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Reset: {
+            float iconSize = std::min(pw * 0.55f, ph * 0.50f);
+            AppendIcon(HudIconId::Reset, cx, cy - ph * 0.10f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("RESET", cx, cy + ph * 0.27f, 0.70f, inkColor, outVertices, outIndices);
+            break;
+        }
+        case TouchControlId::Settings: {
+            float iconSize = std::min(pw * 0.55f, ph * 0.50f);
+            AppendIcon(HudIconId::Settings, cx, cy - ph * 0.10f, iconSize, inkColor, outVertices, outIndices);
+            AppendText("EDIT", cx, cy + ph * 0.27f, 0.80f, inkColor, outVertices, outIndices);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void TouchHUD::AppendToolbarButton(float x, float y, float w, float h,
+                                   const std::string& label, HudIconId icon,
+                                   const Vector4& btnColor, const Vector4& accentColor,
+                                   std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices) {
+    AppendCardQuad(x, y, w, h, 4.0f, btnColor, accentColor, false, false, outVertices, outIndices);
+
+    float cx = x + w * 0.5f;
+    float cy = y + h * 0.5f;
+
+    if (icon != HudIconId::Count) {
+        float iconSize = h * 0.50f;
+        if (!label.empty()) {
+            AppendIcon(icon, cx - w * 0.24f, cy, iconSize, Vector4{1, 1, 1, 1}, outVertices, outIndices);
+            AppendText(label, cx + w * 0.16f, cy, 0.90f, Vector4{1, 1, 1, 1}, outVertices, outIndices);
+        } else {
+            AppendIcon(icon, cx, cy, iconSize, Vector4{1, 1, 1, 1}, outVertices, outIndices);
+        }
+    } else {
+        AppendText(label, cx, cy, 0.95f, Vector4{1, 1, 1, 1}, outVertices, outIndices);
+    }
 }
 
 void TouchHUD::Render(float screenW, float screenH) {
@@ -779,35 +952,77 @@ void TouchHUD::Render(float screenW, float screenH) {
 
     std::vector<HudVertex> vertices;
     std::vector<uint16_t> indices;
-    vertices.reserve(128);
-    indices.reserve(256);
+    vertices.reserve(512);
+    indices.reserve(1024);
 
     // 1. Append Virtual Controls
     for (const auto& ctrl : m_controls) {
         AppendControlQuad(ctrl, vertices, indices);
     }
 
-    // 2. In Edit Mode: Append Layout Editor Top Toolbar
+    // 2. In Edit Mode: Append Sleek Top Toolbar Card (inspired by NFSU2 Revived)
     if (m_editMode) {
-        float toolbarY = 0.03f * m_screenHeight;
-        float toolbarH = 0.08f * m_screenHeight;
-        float btnW = 0.10f * m_screenWidth;
+        float toolbarY = 0.025f * m_screenHeight;
+        float toolbarH = 0.085f * m_screenHeight;
+        float cardX = 0.20f * m_screenWidth;
+        float cardW = 0.60f * m_screenWidth;
 
-        // [DONE / SAVE] Green button
-        AppendToolbarQuad(0.28f * m_screenWidth, toolbarY, btnW, toolbarH, "DONE", Vector4{0.15f, 0.65f, 0.25f, 0.90f}, vertices, indices);
-        // [RESET] Amber button
-        AppendToolbarQuad(0.40f * m_screenWidth, toolbarY, btnW, toolbarH, "RESET", Vector4{0.75f, 0.45f, 0.10f, 0.90f}, vertices, indices);
-        // [SIZE -] Cyan button
-        AppendToolbarQuad(0.52f * m_screenWidth, toolbarY, 0.06f * m_screenWidth, toolbarH, "SIZE-", Vector4{0.15f, 0.45f, 0.70f, 0.90f}, vertices, indices);
-        // [SIZE +] Cyan button
-        AppendToolbarQuad(0.60f * m_screenWidth, toolbarY, 0.06f * m_screenWidth, toolbarH, "SIZE+", Vector4{0.15f, 0.45f, 0.70f, 0.90f}, vertices, indices);
-        // [OPACITY] Purple button
-        AppendToolbarQuad(0.68f * m_screenWidth, toolbarY, btnW, toolbarH, "OPAC", Vector4{0.55f, 0.25f, 0.75f, 0.90f}, vertices, indices);
+        // Container Card
+        AppendCardQuad(cardX, toolbarY, cardW, toolbarH, 4.0f,
+                       Vector4{0.06f, 0.09f, 0.14f, 0.92f}, Vector4{0.20f, 0.85f, 1.00f, 0.80f},
+                       false, false, vertices, indices);
+
+        // Hamburger Drag Handle (Left)
+        float handleW = 0.045f * m_screenWidth;
+        AppendCardQuad(cardX + 0.008f * m_screenWidth, toolbarY + 0.01f * m_screenHeight,
+                       handleW, toolbarH - 0.02f * m_screenHeight, 4.0f,
+                       Vector4{0.12f, 0.16f, 0.22f, 0.85f}, Vector4{1, 1, 1, 0.35f},
+                       false, false, vertices, indices);
+        AppendIcon(HudIconId::Hamburger, cardX + 0.008f * m_screenWidth + handleW * 0.5f,
+                   toolbarY + toolbarH * 0.5f, toolbarH * 0.45f,
+                   Vector4{0.00f, 0.85f, 1.00f, 1.0f}, vertices, indices);
+
+        // Buttons
+        float btnY = toolbarY + 0.012f * m_screenHeight;
+        float btnH = toolbarH - 0.024f * m_screenHeight;
+        float btnW = 0.095f * m_screenWidth;
+
+        // [SAVE] Green
+        AppendToolbarButton(cardX + 0.065f * m_screenWidth, btnY, btnW, btnH, "SAVE", HudIconId::Checkmark,
+                            Vector4{0.10f, 0.32f, 0.16f, 0.90f}, Vector4{0.25f, 0.95f, 0.40f, 1.0f},
+                            vertices, indices);
+
+        // [RESET] Amber
+        AppendToolbarButton(cardX + 0.170f * m_screenWidth, btnY, btnW, btnH, "RESET", HudIconId::Reset,
+                            Vector4{0.32f, 0.20f, 0.06f, 0.90f}, Vector4{1.00f, 0.75f, 0.20f, 1.0f},
+                            vertices, indices);
+
+        // [SIZE -] Cyan
+        float smW = 0.055f * m_screenWidth;
+        AppendToolbarButton(cardX + 0.275f * m_screenWidth, btnY, smW, btnH, "", HudIconId::Minus,
+                            Vector4{0.10f, 0.22f, 0.32f, 0.90f}, Vector4{0.20f, 0.85f, 1.00f, 1.0f},
+                            vertices, indices);
+
+        // [SIZE +] Cyan
+        AppendToolbarButton(cardX + 0.340f * m_screenWidth, btnY, smW, btnH, "", HudIconId::Plus,
+                            Vector4{0.10f, 0.22f, 0.32f, 0.90f}, Vector4{0.20f, 0.85f, 1.00f, 1.0f},
+                            vertices, indices);
+
+        // [OPACITY] Purple
+        int opacPercent = (int)std::round(m_opacity * 100.0f);
+        std::string opacLabel = std::to_string(opacPercent) + "%";
+        AppendToolbarButton(cardX + 0.405f * m_screenWidth, btnY, btnW, btnH, opacLabel, HudIconId::Opacity,
+                            Vector4{0.26f, 0.14f, 0.36f, 0.90f}, Vector4{0.80f, 0.45f, 1.00f, 1.0f},
+                            vertices, indices);
+
+        // Helper Subtitle Banner below Toolbar
+        AppendText("DRAG TO POSITION - TAP BUTTON TO RESIZE", cardX + cardW * 0.5f, toolbarY + toolbarH + 16.0f,
+                   0.85f, Vector4{1.0f, 1.0f, 1.0f, 0.75f}, vertices, indices);
     }
 
     if (vertices.empty()) return;
 
-    // Direct GLES 3.0 Alpha Blended Rendering
+    // Direct GLES 3.0 / GL 3.3 Alpha Blended Rendering
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
@@ -816,6 +1031,10 @@ void TouchHUD::Render(float screenW, float screenH) {
     glUseProgram(m_program);
     glUniform2f(m_uResolution, screenW, screenH);
     glUniform1f(m_uGlobalOpacity, m_opacity);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+    glUniform1i(m_uAtlas, 0);
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -827,6 +1046,7 @@ void TouchHUD::Render(float screenW, float screenH) {
     glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_SHORT, 0);
 
     glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 }
@@ -848,7 +1068,7 @@ bool TouchHUD::SaveLayout(const std::string& configFilePath) {
     out << "opacity " << m_opacity << "\n";
 
     for (const auto& ctrl : m_controls) {
-        out << "control " << ctrl.name << " "
+        out << "control " << (int)ctrl.id << " "
             << ctrl.normX << " "
             << ctrl.normY << " "
             << ctrl.normW << " "
@@ -857,7 +1077,6 @@ bool TouchHUD::SaveLayout(const std::string& configFilePath) {
     }
 
     out.close();
-    std::cout << "[TouchHUD] Successfully saved layout configuration to: " << configFilePath << std::endl;
     return true;
 }
 
@@ -865,42 +1084,38 @@ bool TouchHUD::LoadLayout(const std::string& configFilePath) {
     if (configFilePath.empty()) return false;
 
     std::ifstream in(configFilePath);
-    if (!in.is_open()) {
-        return false;
-    }
+    if (!in.is_open()) return false;
 
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == '#') continue;
 
-        std::stringstream ss(line);
+        std::istringstream iss(line);
         std::string token;
-        ss >> token;
+        iss >> token;
 
         if (token == "opacity") {
             float op = 0.85f;
-            if (ss >> op) {
-                m_opacity = std::clamp(op, 0.20f, 1.0f);
+            if (iss >> op) {
+                SetOpacity(op);
             }
         } else if (token == "control") {
-            std::string name;
-            float nx = 0, ny = 0, nw = 0, nh = 0, sc = 1.0f;
-            if (ss >> name >> nx >> ny >> nw >> nh >> sc) {
-                for (auto& ctrl : m_controls) {
-                    if (ctrl.name == name) {
-                        ctrl.normX = std::clamp(nx, 0.0f, 0.95f);
-                        ctrl.normY = std::clamp(ny, 0.0f, 0.95f);
-                        ctrl.normW = std::clamp(nw, 0.02f, 0.40f);
-                        ctrl.normH = std::clamp(nh, 0.02f, 0.40f);
-                        ctrl.scale = std::clamp(sc, 0.50f, 2.00f);
-                        break;
-                    }
+            int idInt = 0;
+            float nx, ny, nw, nh, sc;
+            if (iss >> idInt >> nx >> ny >> nw >> nh >> sc) {
+                auto* ctrl = FindControl((TouchControlId)idInt);
+                if (ctrl) {
+                    ctrl->normX = nx;
+                    ctrl->normY = ny;
+                    ctrl->normW = nw;
+                    ctrl->normH = nh;
+                    ctrl->scale = std::clamp(sc, 0.50f, 2.00f);
                 }
             }
         }
     }
 
-    std::cout << "[TouchHUD] Loaded custom layout from: " << configFilePath << std::endl;
+    in.close();
     return true;
 }
 

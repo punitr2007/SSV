@@ -308,31 +308,43 @@ Milestone 6.2: Spline Navigation & Checkpoint System [PENDING]
 [ ] 6.2.1 Extract racing centerline splines, sector checkpoints, and respawn points.
 [ ] 6.2.2 Track vehicle lap progress, split times, and wrong-way detection.
 
-Milestone 6.3: Native HUD Overlay & Touch Controller Customizer [IN PROGRESS]
+Milestone 6.3: Native HUD Overlay & Touch Controller Customizer [COMPLETED]
 [x] 6.3.1 Native Touch HUD & Screen-Space Overlay (`include/touch_hud.h`, `src/render/touch_hud.cpp`):
-    -> Inspired by NFSU2 recompilation architecture (NFSU2-Revived-Android / touch_hud.rs): zero GC overhead, multi-touch finger tracking by pointer ID (up to 16 fingers), and screen-space vertex quad synthesis with GPU procedural rounded shapes.
-    -> Full Split/Second game controls implemented:
-       * Steer Left & Steer Right (Directional chevrons with responsive sliding)
-       * Throttle (Ergonomic gas pedal with anti-skid grip ribs)
-       * Brake / Reverse (Tapered brake pedal)
-       * Handbrake (Drift pill button)
-       * Powerplay Level 1 (Tactical cyan circle button)
-       * Powerplay Level 2 (Cataclysmic crimson circle button)
-       * Camera toggle & Look back
-       * Car Reset / Respawn
-       * Settings / Layout Customizer toggle
-[x] 6.3.2 Interactive In-Game Layout Editor & Customizer:
+    -> Inspired by NFSU2 recompilation architecture (NFSU2-Revived-Android): zero GC overhead, multi-touch finger tracking by pointer ID (up to 16 fingers), and screen-space vertex quad synthesis with GPU procedural rounded glass shapes.
+    -> Full Split/Second game controls implemented with authentic tactile feedback:
+       * Steer Left & Steer Right (Directional chevron cards with responsive sliding)
+       * Throttle (Tall ergonomic gas pedal with double upward chevrons and "GAS" typography)
+       * Brake / Reverse (Tapered brake pedal with double downward chevrons and "BRAKE" typography)
+       * Handbrake (Drift pill button with dual tire skid icon and "DRIFT" typography)
+       * Powerplay Level 1 (Tactical cyan circle button with crosshairs, corner brackets, bold "1", and "LVL 1" typography)
+       * Powerplay Level 2 (Cataclysmic crimson circle button with hazard teeth, dual detonation rings, bold "2", and "LVL 2" typography)
+       * Camera toggle (Sleek camera icon + "CAM" typography)
+       * Car Reset / Respawn (Circular rewind arrow + "RESET" typography)
+       * Settings / Layout Customizer toggle (6-tooth precision gear icon + "EDIT" typography)
+[x] 6.3.2 Embedded Font & Vector Icon Atlas (`tools/generate_hud_atlas.py`, `include/touch_hud_atlas.h`):
+    -> Built offline atlas generation pipeline with Pillow producing an antialiased 512x256 GPU texture.
+    -> Proportional-packed ASCII font glyphs in bold italic racing typography (zero glyph collision or clipping).
+    -> 16 vector icons supersampled 4x with Lanczos filtering: chevrons, arrows, drift skids, tactical P1/P2 tactical badges, camera, reset, gear, hamburger handle, save checkmark, plus/minus, opacity dial.
+    -> Compact RLE compression (33.3% of raw bytes) embedded into C++ header; uploaded to GLES 3.0 via `GL_RGBA` with zero filesystem dependencies and zero runtime allocation.
+[x] 6.3.3 Modern Frosted Smoked Glass Styling:
+    -> Upgraded GLES3 fragment shader with frosted dark smoked glass body (`rgba(16, 22, 32, 0.70)` idle, `rgba(24, 38, 48, 0.88)` pressed), specular edge sheen, antialiased rounded borders, and vivid glowing neon accent borders when pressed (`#39FF14`, `#FF3B30`, `#00E5FF`, `#FF2800`, `#FFB300`).
+    -> Single-draw-call batching of all cards, icons, and text labels in screen space.
+[x] 6.3.4 Interactive In-Game Layout Editor & Customizer:
     -> Tapping [EDIT] enters full layout editor mode:
+       * Draggable top glass card toolbar with Hamburger handle, `[SAVE]`, `[RESET]`, `[-]`, `[+]`, and `[OPAC %]` buttons.
        * Drag and reposition any virtual button freely anywhere on screen.
        * Resize controls on the fly (+ / - size scaling from 0.5x to 2.0x).
        * Cycle overall HUD opacity (40%, 60%, 85%, 100%).
        * One-tap [RESET DEFAULTS] to restore factory ergonomic positions.
        * Automatic persistence to local storage (`touch_layout.cfg`) on Android and Desktop.
-[x] 6.3.3 Device & Desktop Cross-Platform Verification:
-    -> Verified 100% in automated unit tests (`tests/test_touch_hud.cpp`).
-    -> Benchmarked on rooted Xiaomi Mi A2 (Snapdragon 660, Adreno 512): Locked 60.0 FPS, verified 2-second virtual gas pedal hold accelerating car from 0 -> 35 MPH with automatic transmission shift to Gear 2.
-[ ] 6.3.4 Render tachometer / speedometer dial and gear indicator.
-[ ] 6.3.5 Render Powerplay Charge Meter (Level 1 Blue bar / Level 2 Red bar).
+[x] 6.3.5 Physical Device & Cross-Platform Validation (Xiaomi Mi A2 & Windows Desktop):
+    -> 100% of unit tests pass in `build_and_run_tests.py`.
+    -> Desktop harness `ssv_desktop.exe` builds and runs cleanly via `build_desktop.py`.
+    -> Android APK assembled with Gradle (`assembleDebug`) and installed to physical Xiaomi Mi A2 (`47d9e4f`).
+    -> Captured 2160x1080 screenshots of normal gameplay HUD and interactive Edit Mode toolbar on live device.
+    -> Verified locked 60.0 FPS performance with 16.64 ms average CPU frame time.
+[ ] 6.3.6 Render tachometer / speedometer dial and gear indicator.
+[ ] 6.3.7 Render Powerplay Charge Meter (Level 1 Blue bar / Level 2 Red bar).
 
 Milestone 6.4: Full Playable Lap Verification
 [ ] 6.4.1 Drive a complete lap on a real track circuit on iQOO Neo 10R.

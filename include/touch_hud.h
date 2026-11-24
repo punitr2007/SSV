@@ -5,8 +5,12 @@
  *
  * Inspired by high-performance recompilation HUDs (NFSU2-Revived-Android):
  *  - Zero GC overhead multi-touch tracking by pointer ID (up to 16 fingers).
- *  - Screen-space vertex generation with GPU-rendered procedural rounded shapes,
- *    accent glowing borders, and Split/Second styled tactical action icons.
+ *  - Screen-space vertex generation with GPU-rendered frosted smoked glass shapes,
+ *    specular edge highlights, glowing neon active borders, and Split/Second
+ *    tactical action badges.
+ *  - Embedded high-resolution font glyph and vector icon atlas (touch_hud_atlas.h)
+ *    rendering crisp uppercase typography ("GAS", "BRAKE", "LEFT", "RIGHT", "DRIFT",
+ *    "LVL 1", "LVL 2", "CAM", "RESET", "EDIT") and razor-sharp racing icons.
  *  - Interactive On-Screen Layout Editor allowing players to drag, reposition,
  *    scale (0.5x - 2.0x), and adjust opacity of every individual button.
  *  - Automatic persistence of custom button positions to local disk config.
@@ -14,11 +18,13 @@
 
 #include "math_types.h"
 #include "input_state.h"
+#include "touch_hud_atlas.h"
 #include <string>
 #include <vector>
 #include <array>
 #include <memory>
 #include <cstdint>
+#include <algorithm>
 
 namespace SSV {
 
@@ -41,11 +47,12 @@ enum class TouchControlId {
 
 enum class ControlShape {
     Round = 0,
-    Pedal,
-    Pill,
-    ArrowLeft,
-    ArrowRight,
-    ToolbarBtn
+    Pedal = 1,
+    Pill = 2,
+    Card = 3,
+    ArrowLeft = 3,
+    ArrowRight = 3,
+    ToolbarBtn = 4
 };
 
 struct VirtualControl {
@@ -61,9 +68,9 @@ struct VirtualControl {
     float scale = 1.0f;
 
     ControlShape shape = ControlShape::Round;
-    Vector4 idleColor{0.10f, 0.12f, 0.16f, 0.70f};
-    Vector4 activeColor{0.20f, 0.85f, 1.00f, 0.95f};
-    Vector4 accentColor{0.00f, 0.70f, 1.00f, 1.00f};
+    Vector4 idleColor{0.07f, 0.10f, 0.15f, 0.65f};
+    Vector4 activeColor{0.12f, 0.22f, 0.30f, 0.88f};
+    Vector4 accentColor{0.00f, 0.85f, 1.00f, 1.00f};
 
     bool isHeld = false;
     int32_t activePointerId = -1;
@@ -95,7 +102,7 @@ struct HudVertex {
     float v = 0.0f;
     Vector4 color{1.0f, 1.0f, 1.0f, 1.0f};
     Vector4 accentColor{1.0f, 1.0f, 1.0f, 1.0f};
-    float shapeType = 0.0f;
+    float shapeType = 0.0f; // 0..4: Procedural Card, 5.0+: Textured Atlas Quad
     float isPressed = 0.0f;
     float isSelected = 0.0f;
 };
@@ -144,8 +151,30 @@ private:
     void InitDefaultControls();
     void BuildShader();
     void AppendControlQuad(const VirtualControl& ctrl, std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
-    void AppendToolbarQuad(float x, float y, float w, float h, const std::string& label, const Vector4& col,
-                           std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
+    
+    // Low-level batch rendering primitives
+    void AppendCardQuad(float px, float py, float pw, float ph, float shapeType,
+                        const Vector4& fillColor, const Vector4& strokeColor,
+                        bool isPressed, bool isSelected,
+                        std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
+
+    void AppendAtlasQuad(float px, float py, float pw, float ph,
+                         float u0, float v0, float u1, float v1,
+                         const Vector4& color,
+                         std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
+
+    void AppendIcon(HudIconId icon, float cx, float cy, float size,
+                    const Vector4& color,
+                    std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
+
+    void AppendText(const std::string& text, float cx, float cy, float scale,
+                    const Vector4& color,
+                    std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
+
+    void AppendToolbarButton(float x, float y, float w, float h,
+                             const std::string& label, HudIconId icon,
+                             const Vector4& btnColor, const Vector4& accentColor,
+                             std::vector<HudVertex>& outVertices, std::vector<uint16_t>& outIndices);
 
     float m_screenWidth = 2160.0f;
     float m_screenHeight = 1080.0f;
@@ -172,8 +201,10 @@ private:
     uint32_t m_vao = 0;
     uint32_t m_vbo = 0;
     uint32_t m_ebo = 0;
+    uint32_t m_atlasTexture = 0;
     int32_t m_uResolution = -1;
     int32_t m_uGlobalOpacity = -1;
+    int32_t m_uAtlas = -1;
     bool m_glInitialized = false;
 };
 
