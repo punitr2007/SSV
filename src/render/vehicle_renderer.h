@@ -69,6 +69,11 @@ private:
     uint32_t m_chassisIndexCount = 0;
     GLenum m_chassisIndexType = GL_UNSIGNED_INT;
     GLuint m_chassisTexture = 0;
+    GLuint m_wheelTexture = 0;
+    GLuint m_shadowTexture = 0;
+    GLuint m_normalSpecTexture = 0;
+    GLuint m_interiorLightsTexture = 0;
+    GLuint m_damageTexture = 0;
     bool m_hasCookedMesh = false;
 
     // Wheel GL buffers

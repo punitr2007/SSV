@@ -70,6 +70,11 @@ void VehicleRenderer::Shutdown() {
     if (m_chassisVbo) { glDeleteBuffers(1, &m_chassisVbo); m_chassisVbo = 0; }
     if (m_chassisEbo) { glDeleteBuffers(1, &m_chassisEbo); m_chassisEbo = 0; }
     if (m_chassisTexture) { glDeleteTextures(1, &m_chassisTexture); m_chassisTexture = 0; }
+    if (m_wheelTexture) { glDeleteTextures(1, &m_wheelTexture); m_wheelTexture = 0; }
+    if (m_shadowTexture) { glDeleteTextures(1, &m_shadowTexture); m_shadowTexture = 0; }
+    if (m_normalSpecTexture) { glDeleteTextures(1, &m_normalSpecTexture); m_normalSpecTexture = 0; }
+    if (m_interiorLightsTexture) { glDeleteTextures(1, &m_interiorLightsTexture); m_interiorLightsTexture = 0; }
+    if (m_damageTexture) { glDeleteTextures(1, &m_damageTexture); m_damageTexture = 0; }
 
     if (m_wheelVao) { glDeleteVertexArrays(1, &m_wheelVao); m_wheelVao = 0; }
     if (m_wheelVbo) { glDeleteBuffers(1, &m_wheelVbo); m_wheelVbo = 0; }
@@ -386,37 +391,51 @@ bool VehicleRenderer::LoadCookedAssets() {
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, meshHdr->vertexStride, (void*)40);
 
+    if (meshHdr->vertexStride >= 64) {
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, meshHdr->vertexStride, (void*)48);
+    }
+
     glBindVertexArray(0);
 
     m_chassisIndexCount = meshHdr->indexCount;
     m_chassisIndexType = (meshHdr->indexFormat == 1) ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
     m_hasCookedMesh = true;
 
-    LOGI("[VehicleRenderer] Successfully bound Cooked Vehicle Mesh (%u vertices, %u indices).\n",
-         meshHdr->vertexCount, meshHdr->indexCount);
+    LOGI("[VehicleRenderer] Successfully bound Cooked Vehicle Mesh (%u vertices, %u indices, %u stride).\n",
+         meshHdr->vertexCount, meshHdr->indexCount, meshHdr->vertexStride);
 
-    // 4. Load Vehicle Body Diffuse Texture
-    const CookedResourceEntry* texEntry = reader.FindEntry("textures/vehicles/musclecar_01_diffuse");
-    if (texEntry) {
-        const uint8_t* texBlob = reader.GetEntryData(texEntry);
-        const auto* texHdr = reinterpret_cast<const GPUTextureHeader*>(texBlob);
-        const uint8_t* pixelData = texBlob + sizeof(GPUTextureHeader);
+    // 4. Helper to upload texture from cooked bundle
+    auto uploadTex = [&](const char* resName) -> GLuint {
+        const CookedResourceEntry* entry = reader.FindEntry(resName);
+        if (!entry) return 0;
+        const uint8_t* blob = reader.GetEntryData(entry);
+        const auto* hdr = reinterpret_cast<const GPUTextureHeader*>(blob);
+        const uint8_t* pixels = blob + sizeof(GPUTextureHeader);
 
-        glGenTextures(1, &m_chassisTexture);
-        glBindTexture(GL_TEXTURE_2D, m_chassisTexture);
+        GLuint tid = 0;
+        glGenTextures(1, &tid);
+        glBindTexture(GL_TEXTURE_2D, tid);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, texHdr->glInternalFormat,
-                     texHdr->width, texHdr->height, 0,
-                     texHdr->glFormat, texHdr->glType, pixelData);
+        glTexImage2D(GL_TEXTURE_2D, 0, hdr->glInternalFormat,
+                     hdr->width, hdr->height, 0,
+                     hdr->glFormat, hdr->glType, pixels);
 
         glBindTexture(GL_TEXTURE_2D, 0);
-        LOGI("[VehicleRenderer] Uploaded Cooked Diffuse Texture (%ux%u RGBA).\n",
-             texHdr->width, texHdr->height);
-    }
+        LOGI("[VehicleRenderer] Uploaded Cooked Texture '%s' (%ux%u).\n", resName, hdr->width, hdr->height);
+        return tid;
+    };
+
+    m_chassisTexture       = uploadTex("textures/vehicles/musclecar_01_diffuse");
+    m_wheelTexture         = uploadTex("textures/vehicles/musclecar_01_wheel");
+    m_shadowTexture        = uploadTex("textures/vehicles/musclecar_01_shadow");
+    m_normalSpecTexture    = uploadTex("textures/vehicles/musclecar_01_normal_spec");
+    m_interiorLightsTexture= uploadTex("textures/vehicles/musclecar_01_interior_lights");
+    m_damageTexture        = uploadTex("textures/vehicles/musclecar_01_damage");
 
     return true;
 }
@@ -683,7 +702,14 @@ void VehicleRenderer::RenderScene(const CameraRig& camera, const Physics::Vehicl
     glDrawElements(GL_TRIANGLES, m_chassisIndexCount, m_chassisIndexType, nullptr);
 
     // 3. Render 4 Wheels
-    glUniform1i(m_uUseTexture, 0);
+    if (m_wheelTexture != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_wheelTexture);
+        glUniform1i(m_uTexture, 0);
+        glUniform1i(m_uUseTexture, 1);
+    } else {
+        glUniform1i(m_uUseTexture, 0);
+    }
     glBindVertexArray(m_wheelVao);
     glUniform4f(m_uTint, 1.0f, 1.0f, 1.0f, 1.0f);
 

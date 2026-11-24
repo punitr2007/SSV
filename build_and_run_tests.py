@@ -18,11 +18,13 @@ sources = [
     os.path.join(ssv_dir, "src", "core", "state_machine.cpp"),
     os.path.join(ssv_dir, "src", "core", "game_engine.cpp"),
     os.path.join(ssv_dir, "src", "core", "vehicle_physics.cpp"),
+    os.path.join(ssv_dir, "src", "core", "vehicle_database.cpp"),
     os.path.join(ssv_dir, "src", "core", "camera_rig.cpp"),
     os.path.join(ssv_dir, "tests", "test_math.cpp"),
     os.path.join(ssv_dir, "tests", "test_state_machine.cpp"),
     os.path.join(ssv_dir, "tests", "test_ark_parser.cpp"),
     os.path.join(ssv_dir, "tests", "test_vehicle_physics.cpp"),
+    os.path.join(ssv_dir, "tests", "test_vehicle_database.cpp"),
     os.path.join(ssv_dir, "tests", "test_cooked_bundle.cpp"),
     os.path.join(ssv_dir, "tests", "test_runner.cpp")
 ]

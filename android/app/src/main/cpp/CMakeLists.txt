@@ -23,6 +23,7 @@ set(SSV_SOURCES
     "${SSV_ROOT}/src/render/vehicle_renderer.cpp"
     "${SSV_ROOT}/src/render/gl_platform.cpp"
     "${SSV_ROOT}/src/core/vehicle_physics.cpp"
+    "${SSV_ROOT}/src/core/vehicle_database.cpp"
     "${SSV_ROOT}/src/core/camera_rig.cpp"
     "${SSV_ROOT}/src/assets/ark_parser.cpp"
     "${SSV_ROOT}/src/assets/lzss_decomp.cpp"

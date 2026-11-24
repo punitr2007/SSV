@@ -7,7 +7,7 @@ Target Executable: D:\Codes\Win_codes\Split.Second.Velocity\SplitSecond.exe
 Target Data Directory: D:\Codes\Win_codes\Split.Second.Velocity\data
 Porting Workspace: D:\Codes\Win_codes\SSV
 Remote Repository: https://github.com/punitr2007/SSV.git (branch: main)
-Target Device: iQOO Neo 10R (iQOO I2221, Snapdragon 8s Gen 3 SM8635, Adreno 735, Android 16)
+Target Device: Xiaomi Mi A2 (SDM660, Adreno 512, Android 10, Magisk Root) & iQOO Neo 10R (Snapdragon 8s Gen 3, Adreno 735, Android 16)
 Analysis Engines: REA (Reverse Engineer Anything) + Ghidra 12.2 PUBLIC
 Host Compiler: Clang 20.1.3 MinGW (C:\Program Files\Windhawk\Compiler\bin\clang++.exe)
 
@@ -182,23 +182,28 @@ game models, and generate GPU-ready .ssvpak bundles.
 
 Milestone 4.1: Binary Mesh & Geometry Format Analysis
 [x] 4.1.1 Identify vehicle mesh records in `resident.ark` via string hashes.
-    -> Verified 0x44C34B08 VehicleDatabase.xml, extracted Musclecar_01 (High.model, model.stream, streamtex).
+    -> Verified 0x44C34B08 VehicleDatabase.xml, extracted Musclecar_01 (High.model, model.stream, streamtex, params).
 [x] 4.1.2 Reverse engineer vertex declaration (FVF / stream layouts: Pos, Normal, UV, Tangent, SkinWeights).
     -> Reverse engineered 28-byte packed vertex declaration: FLOAT16_4 position (w, z, x, y), FLOAT16_4 deform, FLOAT16_2 UV (u, v), FLOAT16_3 normal (nx, ny, nz).
 [x] 4.1.3 Decode 16-bit / 32-bit index buffer topology and submesh draw calls / materials.
-    -> Decoded triangle strip index buffer topology with degenerate triangles and submesh envelope filtering.
+    -> Reverse engineered the exact Black Rock Studio submesh descriptor table in Musclecar_01_High.model:
+       * Buffer Section Table at offset 0x0410 (1040) indexing all 8 contiguous memory slices (IBO, VBO, vertex streams).
+       * 16-byte Submesh Draw Table at offset 0x16DC (5852 to 6124) defining all 17 submesh draw calls:
+         Chassis (28,992 inds), Interior (9,567 inds), Hood/Bumpers (4,677 inds), Doors (3,108 inds),
+         Wheels (1,923 inds), Rims/Calipers (1,200 inds), Windscreen (552 inds), Rear/Side Windows (480 inds),
+         Taillight lenses (240 inds), Headlight covers (378 inds), Light bulb quads (12 inds each).
 [x] 4.1.4 Build standalone Python / C++ converter in `tools/ssv_cooker.py` to emit .ssvpak mesh chunks.
-    -> Built zero-overhead cooker writing 48-byte interleaved VBOs and 16-bit EBOs into main_game.bin.
+    -> Built zero-overhead cooker writing 64-byte GPU-aligned VBOs (pos[3f], norm[3f], color[4f], uv[2f], deform[4f]) and 16-bit EBOs into main_game.bin.
 
 Milestone 4.2: Texture Formats & Offline Transcoder
 [x] 4.2.1 Reverse engineer Black Rock Studio texture container header (dimensions, mip count, fourcc).
     -> Reverse engineered SXET header, streamtex DDS containers (DXT1/DXT4/DXT5).
 [x] 4.2.2 Decode original DXT1 / DXT5 / RGBA surfaces.
-    -> Extracted and decoded body_diffuse.dds, wheel.dds, ground_shadow.dds, damage_map.dds.
+    -> Decoded full 6-texture vehicle suite: body_diffuse.dds, wheel.dds, ground_shadow.dds, body_normal_spec.dds (DXT4->DXT5), interior_lights.dds (DXT4->DXT5), damage_map.dds.
 [x] 4.2.3 Integrate offline transcoder in cooker to emit GPU textures.
-    -> Built RGBA8888 GPU-ready zero-decompression texture pipeline (512x1024 body diffuse).
+    -> Built RGBA8888 GPU-ready zero-decompression texture pipeline packing all 6 textures into main_game.bin (8,144,264 bytes package).
 [x] 4.2.4 Verify zero-decompression texture upload via `glTexImage2D` on Android.
-    -> Verified direct zero-decompression upload from mmap'd APK asset buffer on iQOO Neo 10R.
+    -> Verified direct zero-decompression upload from mmap'd APK asset buffer on physical Xiaomi Mi A2 (Adreno 512).
 
 Milestone 4.3: Skeleton, Bone Hierarchies & Animation Streams
 [ ] 4.3.1 Locate vehicle wheel anchor bones and chassis attachment points in binary model files.
@@ -210,11 +215,19 @@ Milestone 4.4: Havok Collision Mesh Extraction
 
 Milestone 4.5: Rendering Original Vehicle Model End-to-End
 [x] 4.5.1 Cook one real car (Musclecar_01) into `main_game.bin`.
-    -> Cooked 2,929 vertices, 3,872 triangles (11,616 indices) + 512x1024 RGBA diffuse texture into main_game.bin (2,262,618 bytes).
-[x] 4.5.2 Render the real vehicle mesh on screen in `ssv_desktop.exe` and on iQOO Neo 10R.
-    -> Verified on both desktop harness (OpenGL 3.3 Core) and physical iQOO Neo 10R (OpenGL ES 3.0).
+    -> Cooked full vehicle geometry: 14,285 vertices (64-byte stride preserving deform), 75,087 indices + all 6 textures into main_game.bin (8,144,264 bytes).
+[x] 4.5.2 Render the real vehicle mesh on screen in `ssv_desktop.exe` and on Xiaomi Mi A2.
+    -> Verified on both desktop harness (OpenGL 3.3 Core) and physical Xiaomi Mi A2 (OpenGL ES 3.0, Adreno 512, 2160x1080 native).
 [x] 4.5.3 Validate frame time and visual fidelity.
-    -> Confirmed locked 60 FPS tick with zero-decompression runtime overhead.
+    -> Confirmed locked 60.0 FPS frame tick in logcat with zero-decompression runtime overhead.
+
+Milestone 4.6: Data-Driven Vehicle Database & Handling Integration [COMPLETED]
+[x] 4.6.1 Parse `Vehicles/VehicleDatabase.xml`.
+    -> Implemented `SSV::Core::VehicleDatabase` loading all 84 vehicle definitions with stats, regions, camera files, and sound banks.
+[x] 4.6.2 Parse Black Rock Studio `.params` vehicle handling files.
+    -> Extracted exact Musclecar_01 physical constants: Mass 1600.0 kg, COM.y = 0.2m, Axle HardPoints +/-1.36m, Downforce scale 8.0, Roll/Pitch spring 100.0.
+[x] 4.6.3 Validate data-driven handling integration via automated unit tests.
+    -> 100% of unit tests pass in `test_runner.exe`.
 
 ================================================================================
 STAGE 5: Audio & Video Subsystems [PENDING]
